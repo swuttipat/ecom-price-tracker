@@ -1,0 +1,13 @@
+platform,category,subcategory,slug,query,pages,enabled,notes
+lazada,Supplements,Digestive Care,shop-digestion-and-absorption,probiotic,5,yes,core probiotic shelf
+lazada,Supplements,Digestive Care,shop-digestion-and-absorption,โพรไบโอติก,5,yes,Thai keyword on the same shelf
+lazada,Supplements,Immunity,shop-immune-system,probiotic,5,yes,
+lazada,Supplements,Multivitamins,shop-multivitamin-supplements,probiotic,5,yes,
+lazada,Supplements,Women's Health,shop-women-and-menopause,probiotic,5,yes,vaginal / femme probiotic sits here
+lazada,Supplements,Detoxification,shop-liver-detox,probiotic,5,yes,
+lazada,Supplements,Well Being Sets,shop-well-being-sets,probiotic,3,yes,bundles and gift sets
+lazada,Supplements,All Probiotic (search),catalog,probiotic,5,yes,unfiltered search - catches SKUs mis-categorised by the seller
+lazada,Supplements,All Probiotic (search),catalog,โพรไบโอติก,5,no,turn on for wider Thai-language coverage
+lazada,Supplements,Prebiotic / Synbiotic,catalog,พรีไบโอติก,3,no,adjacent category - enable when you want the wider gut-health market
+lazada,Supplements,Prebiotic / Synbiotic,catalog,synbiotic,3,no,
+lazada,Supplements,Digestive Care,shop-digestion-and-absorption,จุลินทรีย์,3,no,generic "microorganism" - noisy, enable with care

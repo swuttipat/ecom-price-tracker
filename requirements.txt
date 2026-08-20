@@ -1,0 +1,8 @@
+# Everything else this project uses is stdlib.
+#
+# playwright is the fallback path only: browser_fetch.py imports it lazily, and it is
+# reached when Lazada walls plain HTTP. It needs its browser downloaded separately:
+#     python -m playwright install chromium
+pandas>=2.0
+numpy>=1.24
+playwright>=1.40

@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Nothing in this project needs a credential today. These are here so that if one ever
+# arrives it lands in GitHub repo secrets, never in a commit.
+.env
+*.token
+secrets.*
+
+# Local tooling config (machine-specific absolute paths)
+.claude/
+
+# Raw gzipped payloads: ~1.3 MB per day, and only ever read by `run.bat rebuild`, which is
+# a local debugging path. Kept on disk, out of the repo. Note the consequence: `rebuild`
+# will not work on a fresh clone.
+data/raw/_payloads/
+
+# Regenerable by pipeline.py, 6.9 MB and growing daily. Nothing reads it as an input;
+# the dashboard loads app_data.js only.
+data/processed/products_master.csv
+
+# Atomic-write temp files, in case a run is interrupted mid-swap
+*.tmp
+
+# Editor and OS cruft
+Thumbs.db
+desktop.ini
+.vscode/

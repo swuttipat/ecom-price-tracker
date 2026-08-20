@@ -1,0 +1,26 @@
+{
+  "_comment": "Runtime settings for the collectors. Edit these instead of the code.",
+
+  "currency": "THB",
+  "accept_language": "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+
+  "_pace_comment": "Sequential requests only, randomised gap between them. Raising these makes runs slower but safer.",
+  "delay_seconds_min": 2.0,
+  "delay_seconds_max": 4.0,
+  "request_timeout_seconds": 30,
+  "retries_per_request": 2,
+
+  "_cap_comment": "Hard stop so a config mistake can never turn into a hammering loop.",
+  "max_requests_per_run": 90,
+
+  "_payload_comment": "Keep the untouched JSON so a parser bug can be fixed without re-scraping.",
+  "save_payloads": true,
+  "payload_retention_days": 30,
+
+  "_lang_comment": "Lazada auto-translates search results. 'as_returned' keeps whatever the platform sends; 'force_thai' adds the Thai locale hints. See README.",
+  "product_name_language": "force_thai",
+
+  "_scope_comment": "Which platforms the pipeline and dashboard include. A platform listed here is kept; anything else is left out of the processed tables so a partial history cannot distort day-over-day comparisons. Raw snapshots in data/raw are NEVER touched by this. Empty list means include everything.",
+  "dashboard_platforms": ["lazada"]
+}
