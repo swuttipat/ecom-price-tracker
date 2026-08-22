@@ -484,6 +484,13 @@ def pct(numerator, denominator) -> float:
     return round(100.0 * numerator / denominator, 1)
 
 
-def die(message: str) -> None:
+# Exit codes. An unattended caller has to tell these apart: a transient network failure
+# is worth retrying, an anti-bot wall never is. The wall is raised against the client, not
+# the URL, so a second attempt only deepens the block.
+EXIT_FAILURE = 1
+EXIT_WALL = 2
+
+
+def die(message: str, code: int = EXIT_FAILURE) -> None:
     print(f"\nERROR: {message}\n", file=sys.stderr)
-    sys.exit(1)
+    sys.exit(code)

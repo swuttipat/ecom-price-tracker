@@ -1,0 +1,99 @@
+# Daily unattended collection. Replaces running scripts\run.bat by hand, which meant a
+# missed day whenever the laptop was off. Phase 0 (phase0-reachability.yml) proved a
+# GitHub-hosted runner reaches Lazada and gets the Thai storefront, which is what makes
+# this possible at all.
+#
+# NOTE ON THE 60-DAY TIMER: GitHub disables scheduled workflows after 60 days of repository
+# inactivity, and pushes made with GITHUB_TOKEN do not reset that timer. A warning email
+# comes first; one manual "Run workflow" click re-arms it.
+#
+# This file and scripts\run.bat are two paths to the same work. Keep them in sync: both
+# call collect_lazada.py then pipeline.py, in that order.
+name: Daily Lazada collection
+
+on:
+  schedule:
+    # 01:00 UTC = 08:00 Asia/Bangkok
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+# Never let two runs race for the same day's raw file. Not cancel-in-progress: a run that
+# is already partway through a polite, rate-limited sweep should be allowed to finish.
+concurrency:
+  group: daily-collect
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The runner is UTC. Without this the snapshot would be dated the previous day for
+      # any manual run between midnight and 07:00 Bangkok, and the file name is the date.
+      TZ: Asia/Bangkok
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet -r requirements.txt
+
+      - name: Install Chromium for the browser fallback
+        # Only reached when Lazada walls plain HTTP, but it has to be present before the
+        # collector needs it, not after.
+        run: python -m playwright install --with-deps chromium
+
+      - name: Collect Lazada listings
+        run: |
+          # --no-payload because data/raw/_payloads is gitignored: saving 36 gzipped blobs
+          # the runner then throws away is pure cost.
+          #
+          # Retry transient failures, never a wall. collect_lazada.py exits 2 for an
+          # anti-bot wall and 1 for anything else. The wall is raised against the client,
+          # not the URL, so knocking again only deepens the block.
+          ok=0
+          for attempt in 1 2 3; do
+            python scripts/collect_lazada.py --no-payload && status=0 || status=$?
+            if [ "$status" -eq 0 ]; then ok=1; break; fi
+            if [ "$status" -eq 2 ]; then
+              echo "::error::Anti-bot wall. Stopping without retrying, deliberately. Run scripts\\run-headed.bat locally and solve the challenge once by hand."
+              exit 2
+            fi
+            echo "::warning::Attempt ${attempt} failed with exit ${status}. Retrying in $((attempt * 60))s."
+            sleep $((attempt * 60))
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::Collection failed after 3 attempts. Not a wall, so this is a transport or parsing problem."
+            exit 1
+          fi
+
+      - name: Rebuild the processed tables and dashboard data
+        run: python scripts/pipeline.py
+
+      - name: Commit the new snapshot
+        run: |
+          git config user.name  "ecom-tracker-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No data changes. Nothing to commit."
+            exit 0
+          fi
+          git commit -m "data: daily collection $(date +%Y-%m-%d)"
+          # In case the branch moved under us, for example a local push between runs.
+          git pull --rebase --autostash origin main
+          git push
+
+      - name: Summary
+        if: always()
+        run: python .github/summarise.py >> "$GITHUB_STEP_SUMMARY"

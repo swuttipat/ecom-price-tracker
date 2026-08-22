@@ -187,7 +187,10 @@ def collect(args) -> int:
                 "       by itself. The profile is persistent, so it is remembered.\n"
                 "    2. Raise delay_seconds_min / delay_seconds_max in config/settings.json\n"
                 "       and cut 'pages' in config/targets.csv, then leave it a few hours.\n"
-                "    3. If it keeps happening, the next step is a paid scraping API."
+                "    3. If it keeps happening, the next step is a paid scraping API.",
+                # Exit 2, not 1, so the scheduled workflow stops instead of retrying
+                # into a wall that will not open.
+                code=C.EXIT_WALL,
             )
         C.die("Nothing collected. Every bucket returned no rows. "
               "Run 'py collect_lazada.py --check' to see the raw response.")
