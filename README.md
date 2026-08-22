@@ -8,9 +8,27 @@ Covers **Lazada Thailand** only. Shopee was built and TikTok Shop was probed; bo
 abandoned on 2026-08-20 because anti-bot measures beat every free local approach. The
 reasoning is in `MEMORY.md` and the full investigation in `notes/build-log-v1-20260819.md`.
 
-## Run it
+## It runs itself
 
-Double-click **`scripts\run.bat`** in Explorer. That is the normal way.
+Collection is automated. `.github/workflows/daily-collect.yml` runs every day at
+**08:00 Bangkok** (01:00 UTC), collects, rebuilds the processed tables and commits the new
+snapshot back to `main`. Nothing needs to be running on your machine.
+
+Read the result in the run summary on the Actions tab: listings, median selling price and
+promo penetration against the previous day, what moved, and a warning if the shelf shrank
+enough to suggest a sweep that stopped early.
+
+Two things worth knowing. The workflow retries a transient failure three times but **never
+retries an anti-bot wall**, because a wall is raised against the client rather than the URL;
+the collector signals the difference by exiting 2 for a wall and 1 for everything else. And
+**GitHub disables scheduled workflows after 60 days of repository inactivity**, which the
+bot's own commits do not reset. A warning email comes first, and one manual "Run workflow"
+click re-arms it.
+
+## Run it by hand
+
+Double-click **`scripts\run.bat`** in Explorer. Use this to collect off-schedule, to rebuild
+after changing the pipeline, or to open the dashboard.
 
 From a PowerShell prompt, give it a path. `run.bat` on its own will not work, because
 PowerShell does not search the current folder, and the file lives in `scripts\`:
@@ -217,10 +235,12 @@ folder. On a CI runner the dependencies come from `requirements.txt` instead.
 
 ## Roadmap
 
-- **Unattended collection** — the open question. A GitHub-hosted runner uses a US datacenter
-  IP, which Thai marketplaces are expected to block and which would return non-Thai pricing.
-  `.github/workflows/phase0-reachability.yml` is a manual-trigger spike that settles this before
-  any schedule is written. If it fails, the two remaining routes are a self-hosted runner on
-  Max's machine, which keeps the Thai home IP but needs the machine powered on, or a paid
-  scraping API with Thai residential exit IPs.
+- **Unattended collection** — done, 2026-08-20. The open question was whether a GitHub-hosted
+  runner could reach Lazada at all, since a US datacenter IP was expected to be blocked and to
+  return non-Thai pricing. `.github/workflows/phase0-reachability.yml` settled it: HTTP 200,
+  the Thai storefront, 40 listings, no wall marker. That workflow is kept rather than deleted;
+  re-run it before blaming the collector for anything that looks like a network fault.
+- **Watch the first fortnight.** The spike proves one request, not a 36-request sweep. Lazada's
+  defences are partly behavioural and rate-based, so whether a datacenter IP wears out under
+  daily use is still unknown.
 - **More platforms** — only via a paid scraping API. Everything free and local has been tried.

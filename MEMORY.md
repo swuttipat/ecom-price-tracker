@@ -55,10 +55,32 @@ _None yet._
   that aborts the pipeline. Plus one manual step, mark the folder "Always keep on this device".
   **When git arrives, use `git init --separate-git-dir C:\dev\git\ecom-price-tracker.git`** so the
   object database never sits in OneDrive.
-- **Unattended runs would use a self-hosted GitHub Actions runner, not a GitHub-hosted one.**
-  Cloud runners use US datacenter IPs, which the Thai marketplaces block and which would return
-  non-Thai pricing. A self-hosted runner keeps Max's home IP with the same workflow YAML the
-  flight tracker uses.
+- **A GitHub-hosted runner CAN collect Lazada. Measured 2026-08-20, and it overturns what
+  this file used to say.** The old entry claimed cloud runners get US datacenter IPs which
+  Thai marketplaces block and which return non-Thai pricing. That was assumed, carried over
+  from the flight tracker's notes, and never tested. The Phase 0 spike tested it: from
+  `20.118.29.115`, a US Azure address, Lazada returned **HTTP 200, the Thai storefront and 40
+  listings on page one**, with no wall marker. A self-hosted runner is therefore not needed,
+  and neither is a paid scraping API.
+  - **What that measurement does not cover:** it is one request. A full sweep is 36 over
+    several minutes, and Lazada's defences are partly behavioural and rate-based rather than
+    purely IP reputation, so a datacenter IP that passes one call can still trip a wall
+    partway through. The first complete scheduled run is the real proof.
+  - `.github/workflows/phase0-reachability.yml` is kept rather than deleted. Re-run it before
+    blaming the collector for anything that looks like a network problem.
+- **Collection is automated. `.github/workflows/daily-collect.yml`, 01:00 UTC = 08:00 Asia/Bangkok,
+  plus a manual Run workflow button.** Repo: `github.com/swuttipat/ecom-price-tracker`, private.
+  It collects, rebuilds and commits `data/` back to `main` on its own.
+  - **`TZ: Asia/Bangkok` is set at job level and must stay.** The runner is UTC and the snapshot
+    file is named by date, so without it a manual run before 07:00 Bangkok would misdate the day.
+  - **The workflow retries exit 1 and never exit 2.** `common.EXIT_WALL` is 2, returned only for
+    an anti-bot wall, because retrying a wall deepens the block. Transient failures get three
+    attempts with backoff.
+  - **`scripts\run.bat` and the workflow are two paths to the same work.** Both call
+    `collect_lazada.py` then `pipeline.py`. Change one, change the other.
+  - **GitHub disables scheduled workflows after 60 days of repository inactivity**, and the
+    bot's own pushes with `GITHUB_TOKEN` do **not** reset that timer. A warning email arrives
+    first; one manual Run workflow click re-arms it.
 - **Give Max double-clickable files, not commands with arguments.** He hit three separate failures
   typing paths and args. Number them in run order when order matters, for example `1-...bat` then
   `2-...bat`.
@@ -161,10 +183,13 @@ _None yet._
   seller could coordinate. So the 08-18 **"247 price_rise" spike is a real campaign close, not a
   collection artifact**, and the week's trend data is trustworthy. Cohort discount depth ran
   49.8% → 53.2% → 46.7% across the window. Watch for the next mid-month window around 09-15.
-- **Third anti-bot wall, 2026-08-20**, after 08-11 and 08-18, roughly one every 4-5 days now.
-  Plain HTTP *and* the headless browser were blocked on the first request; nothing was written.
-  08-19 and 08-20 are both missing as a result. **Treat this as a standing condition, not an
-  incident.** Only Max can clear it, by double-clicking `run-headed.bat`.
+- **Third anti-bot wall, 2026-08-20**, after 08-11 and 08-18, roughly one every 4-5 days from
+  Max's home IP. Plain HTTP *and* the headless browser were blocked on the first request and
+  nothing was written. Max cleared it the same evening with `run-headed.bat`, and the 08-20
+  sweep then completed normally: 1,210 listings, 16 buckets, 37 requests. **Only 08-19 is
+  permanently missing.** Treat the recurrence as a standing condition of collecting from the
+  home IP, not as an incident. Whether the GitHub runner's IP suffers the same wear is unknown
+  and worth watching over the first fortnight of scheduled runs.
 - `market_daily.csv` (one row per date per platform) feeds the Daily trend tab. A date with no
   collection renders as a **gap** (`spanGaps: false`) so a missed run can never look like a price
   move. Platform colours are pinned per platform (`PLATFORM_SLOT`), never by list position.

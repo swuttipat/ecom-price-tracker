@@ -52,6 +52,16 @@ workstation says what the market is doing, `probiotic project` decides what to s
 8. Never present a stale snapshot as current. If `days_since_collection` is above zero the
    last collection did not run or was blocked, and that fact leads the answer.
 9. Record decisions and anything learned about the platforms' data in `MEMORY.md`.
+10. **Collection is automated.** `.github/workflows/daily-collect.yml` runs at 08:00 Bangkok,
+    collects, rebuilds and commits `data/` back to `main`. Max does not need to run anything
+    for the data to stay current, so do not tell him to. `scripts\run.bat` is the local path
+    to the same two entry points and the two must be kept in sync.
+11. **A failed scheduled run is not the same as a blocked one.** The collector exits 2 for an
+    anti-bot wall and 1 for anything else, and the workflow retries only exit 1. If a run
+    failed, read the step summary before proposing a fix: it says which stage broke and whether
+    the shelf shrank enough to suggest a sweep cut short.
+12. **GitHub disables scheduled workflows after 60 days of repository inactivity.** The bot's
+    own commits do not reset that timer. If collection silently stops, check this first.
 
 ## Editorial Rules
 
