@@ -1,8 +1,14 @@
 # Everything else this project uses is stdlib.
 #
-# playwright is the fallback path only: browser_fetch.py imports it lazily, and it is
-# reached when Lazada walls plain HTTP. It needs its browser downloaded separately:
+# requests is imported lazily inside common.Fetcher.__init__ (common.py:371) rather than at
+# module top level, so it does not appear in a naive scan of the import block. Leaving it out
+# is what failed the first Phase 0 run: every probe passed and the collector died on
+# ModuleNotFoundError. If you add a lazy import, add it here too.
+#
+# playwright is likewise lazy (browser_fetch.py:97) and is only reached when Lazada walls
+# plain HTTP. It needs its browser downloaded separately:
 #     python -m playwright install chromium
+requests>=2.31
 pandas>=2.0
 numpy>=1.24
 playwright>=1.40
