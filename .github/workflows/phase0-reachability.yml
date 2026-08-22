@@ -1,0 +1,178 @@
+# Phase 0 spike - manual trigger only, no cron. Throwaway once it has answered.
+#
+# The question: can a GitHub-hosted runner collect Lazada Thailand at all?
+#
+# MEMORY.md records the expectation that it cannot. Cloud runners use US datacenter IPs,
+# which Thai marketplaces block and which return non-Thai pricing, and Lazada has walled
+# even a Thai residential IP three times in ten days. This spike settles it, and is built
+# to report WHY rather than just pass or fail: every probe runs even if an earlier one
+# fails, and the verdict lands in the run summary so it is readable on a phone.
+#
+# Read the summary, not the step logs.
+name: Phase 0 - Lazada reachability
+
+on:
+  workflow_dispatch:
+
+jobs:
+  spike:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # ------------------------------------------------------------------ 1
+      - name: 1. Where is this runner?
+        continue-on-error: true
+        run: |
+          IP=$(curl -s --max-time 20 https://api.ipify.org || echo unknown)
+          echo "Runner public IP: $IP"
+          curl -s --max-time 20 \
+            "http://ip-api.com/json/${IP}?fields=status,country,countryCode,city,isp,org,as" \
+            -o /tmp/geo.json || echo '{}' > /tmp/geo.json
+          cat /tmp/geo.json; echo
+          CC=$(python -c "import json;print(json.load(open('/tmp/geo.json')).get('countryCode') or '??')" 2>/dev/null || echo '??')
+          COUNTRY=$(python -c "import json;print(json.load(open('/tmp/geo.json')).get('country') or 'unknown')" 2>/dev/null || echo unknown)
+          printf '%s' "$IP"      > /tmp/r_ip
+          printf '%s' "$CC"      > /tmp/r_cc
+          printf '%s' "$COUNTRY" > /tmp/r_country
+          if [ "$CC" != "TH" ]; then
+            echo "::warning::Runner is in ${COUNTRY} (${CC}), not Thailand. Lazada may geo-adapt or block."
+          fi
+
+      # ------------------------------------------------------------------ 2
+      # The exact URL collect_lazada.build_url() produces for the first enabled bucket,
+      # with the headers common.Fetcher sends. UA and language are read from config so
+      # this probe cannot drift away from the collector.
+      - name: 2. Raw reachability, no dependencies
+        continue-on-error: true
+        run: |
+          UA=$(python -c "import json;print(json.load(open('config/settings.json'))['user_agent'])")
+          AL=$(python -c "import json;print(json.load(open('config/settings.json'))['accept_language'])")
+          BASE='https://www.lazada.co.th/shop-digestion-and-absorption/'
+          URL="${BASE}?ajax=true&isFirstRequest=true&page=1&q=probiotic&lang=th"
+          REF="${BASE}?page=1&q=probiotic&lang=th"
+          echo "GET $URL"
+          CODE=$(curl -sS -o /tmp/body.json -w '%{http_code}' --max-time 45 \
+                   -H "User-Agent: ${UA}" \
+                   -H "Accept-Language: ${AL}" \
+                   -H "Referer: ${REF}" \
+                   -H 'Accept: application/json, text/plain, */*' \
+                   "$URL" || echo 000)
+          echo "HTTP status: $CODE"
+          printf '%s' "$CODE" > /tmp/r_code
+          echo "Body bytes: $(wc -c < /tmp/body.json)"
+          echo '--- first 400 bytes ---'
+          head -c 400 /tmp/body.json || true
+          echo
+          echo '-----------------------'
+          # A slider-captcha response is VALID JSON. Never let a parseable envelope count
+          # as success: these three markers are the ones common.is_antibot_wall() uses.
+          if grep -qiE 'FAIL_SYS_USER_VALIDATE|RGV587_ERROR|FAIL_SYS_ILLEGAL_ACCESS' /tmp/body.json; then
+            printf 'WALL' > /tmp/r_raw
+            echo "::error::Anti-bot wall. The response is valid JSON but carries a wall marker."
+          elif [ "$CODE" = "000" ]; then
+            printf 'UNREACHABLE' > /tmp/r_raw
+            echo "::error::Could not reach www.lazada.co.th at all."
+          elif [ "$CODE" = "200" ]; then
+            printf 'OK' > /tmp/r_raw
+          else
+            printf 'HTTP_%s' "$CODE" > /tmp/r_raw
+          fi
+
+      # ------------------------------------------------------------------ 3
+      # A clean 200 in the wrong currency is still a failed spike: it would mean Lazada
+      # served this runner a non-Thai storefront, and every price collected is wrong.
+      - name: 3. Is it the Thai storefront?
+        continue-on-error: true
+        run: python .github/probe_locale.py
+
+      # ------------------------------------------------------------------ 4
+      # The collector's own code path, so the spike proves the real thing rather than a
+      # hand-built approximation. --check makes one request and writes nothing.
+      - name: 4. The collector's own --check
+        continue-on-error: true
+        run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet -r requirements.txt
+          # Chromium so the browser fallback is genuinely exercised. If plain HTTP is
+          # walled but a real browser gets through, that changes the answer entirely.
+          python -m playwright install --with-deps chromium
+          if python scripts/collect_lazada.py --check; then
+            printf 'OK' > /tmp/r_check
+          else
+            printf 'FAILED' > /tmp/r_check
+          fi
+
+      # ------------------------------------------------------------------ 5
+      # No secret is needed today: the Lazada collector uses no login and no API key.
+      # This block exists so one can be dropped in later without restructuring anything.
+      - name: 5. Secret plumbing (inert today)
+        continue-on-error: true
+        env:
+          SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
+        run: |
+          if [ -z "$SCRAPER_API_KEY" ]; then
+            echo "No SCRAPER_API_KEY set. Expected - nothing here needs a secret yet."
+            printf 'NONE' > /tmp/r_secret
+          else
+            echo "SCRAPER_API_KEY present, ${#SCRAPER_API_KEY} chars. The value is never printed."
+            printf 'PRESENT' > /tmp/r_secret
+          fi
+
+      # ------------------------------------------------------------------ verdict
+      - name: Verdict
+        if: always()
+        run: |
+          r() { cat "/tmp/$1" 2>/dev/null || echo "(did not run)"; }
+          IP=$(r r_ip); CC=$(r r_cc); COUNTRY=$(r r_country)
+          CODE=$(r r_code); RAW=$(r r_raw); LOCALE=$(r r_locale)
+          ITEMS=$(r r_items); CHECK=$(r r_check); SECRET=$(r r_secret)
+
+          if [ "$RAW" = "OK" ] && [ "$LOCALE" = "OK" ] && [ "$CHECK" = "OK" ]; then
+            VERDICT="GREEN"
+            MEANING="A GitHub-hosted runner can collect Lazada. Proceed to the scheduled workflow."
+          elif [ "$RAW" = "WALL" ]; then
+            VERDICT="RED - anti-bot wall"
+            MEANING="Lazada walled this runner. Expected, because it is a datacenter IP. A GitHub-hosted runner is not a viable collector. The fallbacks are a self-hosted runner, which keeps the Thai home IP but needs the PC powered on, or a paid scraping API with Thai residential exit IPs."
+          elif [ "$LOCALE" = "WRONG_STOREFRONT" ]; then
+            VERDICT="RED - wrong storefront"
+            MEANING="The runner reached Lazada but was served a non-Thai storefront, so every price would be wrong. Same two fallbacks."
+          elif [ "$RAW" = "UNREACHABLE" ]; then
+            VERDICT="RED - unreachable"
+            MEANING="Could not reach www.lazada.co.th from this runner at all."
+          else
+            VERDICT="RED - see table"
+            MEANING="Something failed short of a clean collection. The table below says which stage."
+          fi
+
+          {
+            echo "## Phase 0 verdict: ${VERDICT}"
+            echo ""
+            echo "${MEANING}"
+            echo ""
+            echo "| Probe | Result |"
+            echo "|---|---|"
+            echo "| Runner location | ${COUNTRY} (${CC}) |"
+            echo "| Runner public IP | ${IP} |"
+            echo "| Lazada HTTP status | ${CODE} |"
+            echo "| Raw reachability | ${RAW} |"
+            echo "| Thai storefront | ${LOCALE} |"
+            echo "| Listings on page 1 | ${ITEMS} |"
+            echo "| Collector --check | ${CHECK} |"
+            echo "| Secret | ${SECRET} |"
+            echo ""
+            echo "Wall markers checked: FAIL_SYS_USER_VALIDATE, RGV587_ERROR, FAIL_SYS_ILLEGAL_ACCESS."
+            echo "A parseable JSON envelope is not success; a slider captcha returns valid JSON."
+            echo ""
+            echo "**Do not re-run this on a red result.** An anti-bot wall is raised against the"
+            echo "client, not the URL, so knocking again only deepens the block."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Verdict: ${VERDICT}"
+          if [ "$VERDICT" = "GREEN" ]; then exit 0; else exit 1; fi
