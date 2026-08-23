@@ -17,8 +17,21 @@ cd /d "%~dp0"
 set PY=py
 where py >nul 2>nul || set PY=python
 
-if /i "%~1"=="dashboard" goto dashboard
+if /i "%~1"=="dashboard" goto dashboardonly
 if /i "%~1"=="test"      goto test
+
+REM Only this entry point pulls. After a LOCAL collection the freshest data is already
+REM on disk and pulling could collide with it; when you just want to look at the numbers,
+REM the freshest data is whatever the daily runner committed.
+goto skip_pull
+:dashboardonly
+echo Fetching the data the daily run committed...
+pushd "%~dp0.."
+git pull --rebase --autostash
+if errorlevel 1 echo       (could not pull - showing whatever is already on disk)
+popd
+goto dashboard
+:skip_pull
 if /i "%~1"=="offline"   goto process
 if /i "%~1"=="rebuild"   goto rebuild
 

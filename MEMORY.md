@@ -79,6 +79,16 @@ _None yet._
     Slightly deeper ranking coverage, not a schema difference. Worth watching, not acting on.
   - **The pre-automation history has holes: 08-19, 08-21 and 08-22.** Lazada serves no history,
     so those days are gone for good. The series is continuous from 08-23 onward.
+  - **A wall against the runner is much less serious than a wall against Max's home IP, and the
+    fix is different.** GitHub hands each run a different address from Azure's pool, so the next
+    scheduled run starts from a clean one. A fixed home IP instead accumulates reputation damage,
+    which is why it hit three walls in ten days. So: do not re-run a walled job, wait for
+    tomorrow, and only treat three consecutive walls as a pattern worth cutting `pages` over.
+    **`run-headed.bat` cannot fix a walled runner.** It builds a trusted browser profile on
+    Max's laptop, against his own IP; the runner is a fresh container that inherits none of it.
+  - **`run.bat dashboard` pulls before opening.** Once the runner started committing data, the
+    local clone went stale on its own, and the dashboard reads local files. The full `run.bat`
+    path deliberately does not pull, because after a local collection the newest data is on disk.
   - **`TZ: Asia/Bangkok` is set at job level and must stay.** The runner is UTC and the snapshot
     file is named by date, so without it a manual run before 07:00 Bangkok would misdate the day.
   - **The workflow retries exit 1 and never exit 2.** `common.EXIT_WALL` is 2, returned only for

@@ -66,7 +66,21 @@ jobs:
             python scripts/collect_lazada.py --no-payload && status=0 || status=$?
             if [ "$status" -eq 0 ]; then ok=1; break; fi
             if [ "$status" -eq 2 ]; then
-              echo "::error::Anti-bot wall. Stopping without retrying, deliberately. Run scripts\\run-headed.bat locally and solve the challenge once by hand."
+              echo "::error::Anti-bot wall on the runner. Stopping without retrying."
+              echo ""
+              echo "  The wall is raised against the client, not the URL, so a retry only deepens it."
+              echo ""
+              echo "  Do NOT re-run this job today. Each GitHub run gets a different address from"
+              echo "  Azure's pool, so tomorrow's scheduled run starts clean and will most likely"
+              echo "  just work. That is the real advantage over collecting from a fixed home IP,"
+              echo "  which accumulates reputation damage run after run."
+              echo ""
+              echo "  Only a wall three days running is a pattern worth acting on. Then cut 'pages'"
+              echo "  in config/targets.csv or raise the delays in config/settings.json."
+              echo ""
+              echo "  scripts\\run-headed.bat does NOT help here. It fixes this laptop's own access"
+              echo "  by building a trusted browser profile locally. The runner is a fresh container"
+              echo "  on a different address and inherits none of that."
               exit 2
             fi
             echo "::warning::Attempt ${attempt} failed with exit ${status}. Retrying in $((attempt * 60))s."
