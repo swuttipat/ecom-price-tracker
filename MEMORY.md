@@ -71,6 +71,14 @@ _None yet._
 - **Collection is automated. `.github/workflows/daily-collect.yml`, 01:00 UTC = 08:00 Asia/Bangkok,
   plus a manual Run workflow button.** Repo: `github.com/swuttipat/ecom-price-tracker`, private.
   It collects, rebuilds and commits `data/` back to `main` on its own.
+  - **Confirmed working end to end on 2026-08-23**, run #2, 2m53s: 1,259 listings across the
+    usual 16 buckets, zero nulls, rebuilt, committed as `data: daily collection 2026-08-23`
+    and pushed without help. `collected_at` read 22:28 Bangkok rather than UTC, which is the
+    `TZ` setting doing its job.
+  - The runner collected **1,259 listings against the ~1,200 a local sweep usually returns**.
+    Slightly deeper ranking coverage, not a schema difference. Worth watching, not acting on.
+  - **The pre-automation history has holes: 08-19, 08-21 and 08-22.** Lazada serves no history,
+    so those days are gone for good. The series is continuous from 08-23 onward.
   - **`TZ: Asia/Bangkok` is set at job level and must stay.** The runner is UTC and the snapshot
     file is named by date, so without it a manual run before 07:00 Bangkok would misdate the day.
   - **The workflow retries exit 1 and never exit 2.** `common.EXIT_WALL` is 2, returned only for
