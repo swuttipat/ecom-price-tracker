@@ -94,11 +94,20 @@ jobs:
       - name: Rebuild the processed tables and dashboard data
         run: python scripts/pipeline.py
 
+      - name: Sync the dashboard into docs/ for GitHub Pages
+        # docs/index.html is a copy of dashboard/index.html, not a second implementation.
+        # GitHub Pages (Deploy from branch) only serves /(root) or /docs, and dashboard/
+        # is neither, so this keeps the published copy from ever drifting behind the
+        # working one. Its "../data/processed/app_data.js" reference resolves the same
+        # way from docs/ as it does from dashboard/, both being one level under the repo
+        # root, so the data path needs no rewriting.
+        run: cp dashboard/index.html docs/index.html
+
       - name: Commit the new snapshot
         run: |
           git config user.name  "ecom-tracker-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/
+          git add data/ docs/
           if git diff --cached --quiet; then
             echo "No data changes. Nothing to commit."
             exit 0

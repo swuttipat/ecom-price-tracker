@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The page itself must not be cached. Without this the browser can keep serving an
+     older index.html after the dashboard is updated, so fixes appear not to land. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Probiotic Price Tracker — Thailand</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- app_data.js is loaded at the bottom with a cache-busting timestamp. Loading it with a
+     plain <script src> let the browser serve a cached copy, so a fresh collection could
+     still show yesterday's numbers. -->
+<style>
+  :root{
+    color-scheme: light;
+    --surface-1:#fcfcfb; --plane:#f9f9f7;
+    --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --hair:rgba(11,11,11,.10);
+    /* Categorical slots in fixed order. Validated for adjacent-pair CVD separation in
+       both modes; slots 3/4/5 sit under 3:1 on the light surface, which is why every
+       chart using them ships a legend and a table view. */
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+    --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
+    --good:#0ca30c; --warning:#fab219; --critical:#d03b3b;
+    --up:#d03b3b; --down:#2a78d6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:where(:not([data-theme="light"])){
+      color-scheme: dark;
+      --surface-1:#1a1a19; --plane:#0d0d0d;
+      --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+      --grid:#2c2c2a; --axis:#383835; --hair:rgba(255,255,255,.10);
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+      --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+      --up:#d03b3b; --down:#3987e5;
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --surface-1:#1a1a19; --plane:#0d0d0d;
+    --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --hair:rgba(255,255,255,.10);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    --up:#d03b3b; --down:#3987e5;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--plane);color:var(--ink);
+       font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 18px 64px}
+
+  header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px}
+  h1{font-size:22px;margin:0;letter-spacing:-.01em}
+  .sub{color:var(--ink-2);font-size:13px}
+  .themebtn{background:var(--surface-1);color:var(--ink-2);border:1px solid var(--hair);
+            border-radius:999px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:inherit}
+  .themebtn:hover{color:var(--ink)}
+
+  .tabs{display:flex;gap:4px;background:var(--surface-1);border:1px solid var(--hair);
+        border-radius:999px;padding:4px;margin:18px 0 20px;width:fit-content;flex-wrap:wrap}
+  .tabs button{background:transparent;color:var(--ink-2);border:0;padding:8px 18px;border-radius:999px;
+               cursor:pointer;font-size:13px;font-weight:600;font-family:inherit}
+  .tabs button[aria-selected="true"]{background:var(--s1);color:#fff}
+
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin-bottom:20px}
+  .tile{background:var(--surface-1);border:1px solid var(--hair);border-radius:14px;padding:14px 16px}
+  .tile .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .tile .v{font-size:26px;font-weight:650;margin-top:6px;letter-spacing:-.02em}
+  .tile .n{font-size:12px;color:var(--ink-2);margin-top:3px}
+
+  .panel{background:var(--surface-1);border:1px solid var(--hair);border-radius:16px;
+         padding:18px 20px 20px;margin-bottom:18px}
+  .panel h2{font-size:12px;margin:0 0 4px;color:var(--muted);font-weight:650;
+            text-transform:uppercase;letter-spacing:.06em}
+  .panel .cap{font-size:12.5px;color:var(--ink-2);margin:0 0 14px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media (max-width:860px){.row2{grid-template-columns:1fr}}
+
+  .chart{position:relative;width:100%}
+  .h260{height:260px}.h300{height:300px}.h340{height:340px}.h380{height:380px}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--grid);vertical-align:top}
+  th{color:var(--muted);font-weight:650;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+     position:sticky;top:0;background:var(--surface-1);cursor:pointer;white-space:nowrap}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .scroll{overflow:auto;max-height:520px;border-radius:10px}
+  .scrollx{overflow-x:auto}
+  tbody tr:hover{background:color-mix(in srgb, var(--s1) 7%, transparent)}
+  .name{max-width:420px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;
+        -webkit-line-clamp:2;-webkit-box-orient:vertical}
+  a{color:var(--s1)}
+
+  .chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:650;
+        border:1px solid var(--hair);white-space:nowrap}
+  .chip.down{color:var(--down);border-color:color-mix(in srgb,var(--down) 40%,transparent)}
+  .chip.up{color:var(--up);border-color:color-mix(in srgb,var(--up) 40%,transparent)}
+  .chip.new{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
+  .chip.gone{color:var(--muted)}
+  .chip.spon{color:var(--warning);border-color:color-mix(in srgb,var(--warning) 45%,transparent)}
+
+  /* Colour swatch tying a table row to its line. This is the secondary encoding the
+     light-mode contrast warning requires: identity is never colour alone. */
+  .swatch{display:inline-block;width:12px;height:12px;border-radius:3px;
+          border:1px solid var(--axis);vertical-align:middle}
+  #pPick tbody tr{cursor:pointer}
+  .filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+  input[type=search],select{background:var(--surface-1);color:var(--ink);border:1px solid var(--hair);
+    border-radius:10px;padding:8px 11px;font-size:13px;font-family:inherit;min-width:150px}
+  label.cb{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2);cursor:pointer}
+  .count{color:var(--muted);font-size:12px;margin-left:auto}
+
+  .empty{border:1px dashed var(--axis);border-radius:14px;padding:26px 22px;color:var(--ink-2);
+         background:var(--surface-1)}
+  .empty strong{color:var(--ink);display:block;margin-bottom:6px;font-size:15px}
+
+  details.tv{margin-top:12px}
+  details.tv summary{cursor:pointer;color:var(--muted);font-size:12px;list-style:none;
+                     border-top:1px solid var(--grid);padding-top:10px}
+  details.tv summary:hover{color:var(--ink-2)}
+  .hide{display:none!important}
+  .foot{color:var(--muted);font-size:12px;text-align:center;margin-top:26px;line-height:1.7}
+  .warnbar{background:color-mix(in srgb,var(--warning) 14%,var(--surface-1));
+           border:1px solid color-mix(in srgb,var(--warning) 40%,transparent);
+           border-radius:12px;padding:11px 15px;margin-bottom:16px;font-size:13px}
+  .warnbar.stale{background:color-mix(in srgb,var(--critical) 13%,var(--surface-1));
+           border-color:color-mix(in srgb,var(--critical) 55%,transparent);line-height:1.6}
+  .warnbar code{background:color-mix(in srgb,var(--ink) 8%,transparent);padding:1px 5px;border-radius:5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Probiotic Price Tracker — Thailand</h1>
+      <div class="sub" id="meta"></div>
+    </div>
+    <button class="themebtn" id="themeBtn" type="button">Switch theme</button>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true"  data-tab="market">Market today</button>
+    <button role="tab" aria-selected="false" data-tab="trend">Daily trend</button>
+    <button role="tab" aria-selected="false" data-tab="moves">Price moves</button>
+    <button role="tab" aria-selected="false" data-tab="brands">Brands &amp; sellers</button>
+    <button role="tab" aria-selected="false" data-tab="skus">SKU explorer</button>
+  </div>
+
+  <div id="dq"></div>
+
+  <!-- ================= MARKET ================= -->
+  <section id="tab-market">
+    <div class="tiles" id="tiles"></div>
+
+    <div class="panel">
+      <h2>Where the money sits</h2>
+      <p class="cap">Selling price of every tracked listing, grouped into bands. The 2nd–98th
+         percentile is shown so one ฿9,950 gift set does not flatten the rest.</p>
+      <div class="chart h300"><canvas id="cHist"></canvas></div>
+      <details class="tv"><summary>Show as table</summary><div class="scrollx" id="tHist"></div></details>
+    </div>
+
+    <div class="row2">
+      <div class="panel">
+        <h2>Median selling price by shelf</h2>
+        <p class="cap">Half the listings on each shelf sell below this.</p>
+        <div class="chart h300"><canvas id="cSubPrice"></canvas></div>
+        <details class="tv"><summary>Show as table</summary><div class="scrollx" id="tSubPrice"></div></details>
+      </div>
+      <div class="panel">
+        <h2>Share of listings on promotion</h2>
+        <p class="cap">How much of each shelf is discounted right now.</p>
+        <div class="chart h300"><canvas id="cSubPromo"></canvas></div>
+        <details class="tv"><summary>Show as table</summary><div class="scrollx" id="tSubPromo"></div></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DAILY TREND ================= -->
+  <section id="tab-trend" class="hide">
+    <div class="tiles" id="trendTiles"></div>
+
+    <div class="panel">
+      <h2>Product price movement, day by day</h2>
+      <p class="cap">Pick products below to chart their own daily selling price. Up to 8 at a
+         time. Only listings collected on two or more days can be charted.</p>
+      <div class="filters">
+        <input type="search" id="pSearch" placeholder="Search product, brand or seller">
+        <select id="pBrand"></select>
+        <select id="pShelf"></select>
+        <label class="cb"><input type="checkbox" id="pMovedOnly" checked> Price changed only</label>
+        <button class="themebtn" type="button" id="pClear">Clear selection</button>
+        <span class="count" id="pCount"></span>
+      </div>
+      <div class="chart h340"><canvas id="cSkuTrend"></canvas></div>
+      <div class="scrollx" id="tSkuTrend"></div>
+      <details class="tv" open><summary id="pPickSummary">Choose products</summary>
+        <div class="scroll" id="pPick"></div>
+      </details>
+    </div>
+
+    <div id="trendBody"></div>
+  </section>
+
+  <!-- ================= MOVES ================= -->
+  <section id="tab-moves" class="hide">
+    <div id="movesBody"></div>
+  </section>
+
+  <!-- ================= BRANDS ================= -->
+  <section id="tab-brands" class="hide">
+    <div class="panel">
+      <h2>Share of shelf — top brands</h2>
+      <p class="cap">Number of listings each brand has across the shelves tracked. Sponsored
+         placements are excluded so paid position does not read as real presence.</p>
+      <div class="chart h380"><canvas id="cBrands"></canvas></div>
+      <details class="tv"><summary>Show as table</summary><div class="scrollx" id="tBrands"></div></details>
+    </div>
+
+    <div class="panel">
+      <h2>Rating against price</h2>
+      <p class="cap" id="scatterCap"></p>
+      <div class="chart h380"><canvas id="cScatter"></canvas></div>
+      <details class="tv"><summary>Show as table</summary><div class="scroll" id="tScatter"></div></details>
+    </div>
+
+    <div class="panel">
+      <h2>Sellers</h2>
+      <p class="cap">Ranked by number of listings. A seller with many listings and a low median
+         price is competing on price, not range.</p>
+      <div class="scroll" id="tSellers"></div>
+    </div>
+  </section>
+
+  <!-- ================= SKUS ================= -->
+  <section id="tab-skus" class="hide">
+    <div class="panel">
+      <h2>Every tracked listing</h2>
+      <p class="cap">Filter, sort, then select a row to see its price history.</p>
+      <div class="filters">
+        <input type="search" id="fSearch" placeholder="Search product or seller">
+        <select id="fPlatform" class="hide"></select>
+        <select id="fBrand"></select>
+        <select id="fSubcat"></select>
+        <label class="cb"><input type="checkbox" id="fPromo"> On promotion only</label>
+        <span class="count" id="skuCount"></span>
+      </div>
+      <div class="scroll" id="tSkus"></div>
+    </div>
+    <div class="panel" id="histPanel">
+      <h2>Price history</h2>
+      <p class="cap" id="histCap">Select a listing above.</p>
+      <div class="chart h300"><canvas id="cHistory"></canvas></div>
+    </div>
+  </section>
+
+  <div class="foot" id="foot"></div>
+</div>
+
+<script>
+"use strict";
+let D = null;                 // assigned once app_data.js has loaded, see boot() below
+const charts = {};
+
+/* ---------- helpers ---------- */
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const baht = (v, d = 0) => (v === null || v === undefined || isNaN(v)) ? "—"
+  : "฿" + Number(v).toLocaleString("en-US", {minimumFractionDigits: d, maximumFractionDigits: d});
+const num  = (v, d = 0) => (v === null || v === undefined || isNaN(v)) ? "—" : Number(v).toLocaleString("en-US", {minimumFractionDigits: d, maximumFractionDigits: d});
+const pct  = (v, d = 1) => (v === null || v === undefined || isNaN(v)) ? "—" : Number(v).toFixed(d) + "%";
+const esc  = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const platLabel = p => ({lazada: "Lazada"}[p] || p || "—");
+
+/* Chart.js interpolates colours during animation and cannot parse CSS color-mix(), which
+   throws "this._fn is not a function" from its animator. Hand it plain rgba instead. */
+function withAlpha(hex, alpha) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function table(cols, rows, opts = {}) {
+  const head = cols.map(c => `<th class="${c.num ? "num" : ""}">${esc(c.label)}</th>`).join("");
+  const body = rows.map(r => "<tr" + (opts.rowAttr ? " " + opts.rowAttr(r) : "") + ">" +
+      cols.map(c => `<td class="${c.num ? "num" : ""}">${c.cell(r)}</td>`).join("") + "</tr>").join("");
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/* ---------- Chart.js defaults: thin marks, hairline chrome ---------- */
+function applyChartDefaults() {
+  Chart.defaults.font.family = 'system-ui,-apple-system,"Segoe UI",sans-serif';
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = css("--ink-2");
+  Chart.defaults.borderColor = css("--grid");
+  Chart.defaults.maintainAspectRatio = false;
+  // Set properties, never replace the object. Assigning `Chart.defaults.animation = {...}`
+  // drops the keys you leave out, including `easing`; Chart.js then resolves its
+  // interpolator from an undefined easing and can throw inside the animation frame, which
+  // aborts the render loop and leaves canvases blank. Easing is named explicitly so it
+  // cannot go missing whatever the Chart.js build ships as its default.
+  Chart.defaults.animation.duration = 260;
+  Chart.defaults.animation.easing = "easeOutQuart";
+  Chart.defaults.plugins.legend.display = false;
+  Chart.defaults.plugins.tooltip.backgroundColor = css("--surface-1");
+  Chart.defaults.plugins.tooltip.titleColor = css("--ink");
+  Chart.defaults.plugins.tooltip.bodyColor = css("--ink-2");
+  Chart.defaults.plugins.tooltip.borderColor = css("--axis");
+  Chart.defaults.plugins.tooltip.borderWidth = 1;
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.defaults.plugins.tooltip.displayColors = false;
+}
+const axis = (extra = {}) => Object.assign({
+  grid: {color: css("--grid"), drawTicks: false, lineWidth: 1},
+  border: {color: css("--axis")},
+  ticks: {color: css("--muted"), padding: 8},
+}, extra);
+const noGrid = (extra = {}) => Object.assign({
+  grid: {display: false}, border: {color: css("--axis")},
+  ticks: {color: css("--muted"), padding: 8},
+}, extra);
+
+/* ================= MARKET ================= */
+function renderMeta() {
+  const m = D.meta, k = D.kpis;
+  // Name the platforms in TODAY's snapshot, not every platform ever collected, or a day
+  // where one of them was blocked still reads as though it had been collected.
+  const todays = (k.by_platform || []).map(p => p.platform);
+  const shown = todays.length ? todays : (m.platforms || []);
+  document.getElementById("meta").textContent =
+    `${m.latest_date} · ${num(k.n_skus)} listings · ` +
+    `${shown.map(platLabel).join(" + ")} Thailand · prices in ${m.currency}`;
+  document.getElementById("foot").innerHTML =
+    `Built ${esc(m.generated_at)} from ${m.dates.length} collection${m.dates.length > 1 ? "s" : ""}` +
+    ` (${esc(m.dates[0])} to ${esc(m.latest_date)}).<br>` +
+    `Sold counts and ratings are shown only for listings the platform displays them on. ` +
+    `Re-run <code>scripts\\run.bat</code> to refresh.` +
+    // Say so when a platform is deliberately out of scope, otherwise a reader who knows
+    // it was collected will wonder why it is absent. Empty today; kept as a guard.
+    ((m.excluded_platforms || []).length
+      ? `<br>Scoped to ${(m.platforms || []).map(platLabel).join(" + ")} only. ` +
+        `${(m.excluded_platforms || []).map(p => p.split(", ").map(platLabel).join(", ")).join(", ")} ` +
+        `is excluded via <code>dashboard_platforms</code> in config; its raw snapshots are still on disk.`
+      : "");
+
+  const q = Object.fromEntries((D.quality || []).map(r => [r.metric, r.value]));
+  const banners = [];
+
+  // A collection that fails leaves the pipeline rebuilding the last good day. Without
+  // this the page looks freshly updated when it is not.
+  const stale = Number(m.days_old || 0);
+  if (stale > 0) {
+    banners.push(`<div class="warnbar stale"><strong>⚠ These numbers are ${stale} day${stale > 1 ? "s" : ""} old.</strong>
+      The last successful collection was ${esc(m.latest_date)}; today is ${esc(m.today)}.
+      A collection since then either did not run or was blocked, so nothing here reflects
+      today's market. Run <code>scripts\\run.bat</code> and read the collector's output before
+      trusting anything on this page.</div>`);
+  }
+  // A platform that failed to collect would otherwise look like its whole catalogue
+  // was delisted overnight. Its listings are held out of the change log, and that
+  // omission has to be visible or the totals quietly mislead.
+  const lapsed = m.lapsed_platforms || [];
+  if (lapsed.length) {
+    banners.push(`<div class="warnbar"><strong>${lapsed.map(platLabel).join(" and ")} did not collect today.</strong>
+      Everything on this page is ${(m.platforms || []).filter(p => !lapsed.includes(p)).map(platLabel).join(" + ") || "the remaining platforms"} only.
+      Those listings are held out of the change log rather than counted as delisted, so the
+      "gone" figures stay honest, but the market totals and share-of-shelf are incomplete
+      until it collects again.</div>`);
+  }
+  if (q.unparsed_sold_strings > 0 || q.duplicate_rows_dropped > 0) {
+    banners.push(`<div class="warnbar"><strong>Data quality</strong> — ` +
+      `${num(q.unparsed_sold_strings)} unreadable sold counts, ` +
+      `${num(q.duplicate_rows_dropped)} duplicate rows dropped. See data/processed/data_quality.csv.</div>`);
+  }
+  document.getElementById("dq").innerHTML = banners.join("");
+}
+
+function renderTiles() {
+  const k = D.kpis;
+  const plats = k.by_platform || [];
+  const platName = p => ({lazada: "Lazada"}[p] || p);
+  // Only worth a line once there is more than one platform to compare.
+  const platNote = plats.length > 1
+    ? plats.map(p => `${platName(p.platform)} ${num(p.skus)}`).join(" · ")
+    : `${num(k.n_organic)} organic`;
+  const tiles = [
+    ["Listings tracked", num(k.n_skus), platNote],
+    ["Median selling price", baht(k.median_promo), `list price ${baht(k.median_retail)}`],
+    ["On promotion", pct(k.promo_penetration), `avg ${pct(k.avg_discount)} off`],
+    ["Brands", num(k.n_brands), `${num(k.n_sellers)} sellers`],
+    ["Average rating", k.avg_rating ? k.avg_rating.toFixed(2) : "—", `${num(k.total_reviews)} reviews`],
+  ];
+  document.getElementById("tiles").innerHTML = tiles.map(([k2, v, n]) =>
+    `<div class="tile"><div class="k">${esc(k2)}</div><div class="v">${v}</div><div class="n">${esc(n)}</div></div>`).join("");
+}
+
+function renderHist() {
+  const h = D.hist || {edges: [], counts: []};
+  if (!h.counts.length) return;
+  const labels = h.counts.map((_, i) => `${baht(h.edges[i])}–${baht(h.edges[i + 1])}`);
+  charts.hist = new Chart(document.getElementById("cHist"), {
+    type: "bar",
+    data: {labels, datasets: [{
+      data: h.counts, backgroundColor: css("--s1"),
+      borderRadius: 4, borderSkipped: "bottom",
+      categoryPercentage: .9, barPercentage: .92,
+    }]},
+    options: {
+      scales: {
+        x: noGrid({ticks: {color: css("--muted"), maxRotation: 45, minRotation: 45, autoSkip: false, font: {size: 10}}}),
+        y: axis({beginAtZero: true, title: {display: true, text: "listings", color: css("--muted")}}),
+      },
+      plugins: {tooltip: {callbacks: {label: c => `${num(c.parsed.y)} listings`}}},
+    },
+  });
+  document.getElementById("tHist").innerHTML = table(
+    [{label: "Price band", cell: r => esc(r[0])}, {label: "Listings", num: true, cell: r => num(r[1])}],
+    labels.map((l, i) => [l, h.counts[i]]));
+}
+
+function hbar(canvasId, rows, labelKey, valueKey, fmt, color) {
+  return new Chart(document.getElementById(canvasId), {
+    type: "bar",
+    data: {
+      labels: rows.map(r => r[labelKey]),
+      datasets: [{
+        data: rows.map(r => r[valueKey]), backgroundColor: color,
+        borderRadius: 4, borderSkipped: "left",
+        categoryPercentage: .82, barPercentage: .9,
+      }],
+    },
+    options: {
+      indexAxis: "y",
+      layout: {padding: {right: 46}},
+      scales: {x: axis({beginAtZero: true}), y: noGrid({ticks: {color: css("--ink-2"), font: {size: 11.5}}})},
+      plugins: {
+        tooltip: {callbacks: {label: c => fmt(c.parsed.x)}},
+        // Direct value labels: the relief the contrast check asks for, and it removes
+        // any need to read a value off the axis.
+        endLabels: {fmt},
+      },
+    },
+    plugins: [{
+      id: "endLabels",
+      afterDatasetsDraw(chart, _a, opts) {
+        const {ctx} = chart;
+        ctx.save();
+        ctx.fillStyle = css("--ink-2");
+        ctx.font = '600 11.5px system-ui,-apple-system,"Segoe UI",sans-serif';
+        ctx.textBaseline = "middle";
+        chart.getDatasetMeta(0).data.forEach((bar, i) => {
+          const v = chart.data.datasets[0].data[i];
+          if (v === null || v === undefined) return;
+          ctx.fillText(opts.fmt(v), bar.x + 8, bar.y);
+        });
+        ctx.restore();
+      },
+    }],
+  });
+}
+
+function renderSubcats() {
+  const rows = (D.subcats || []).slice().sort((a, b) => b.median_promo_price - a.median_promo_price);
+  if (!rows.length) return;
+  charts.subPrice = hbar("cSubPrice", rows, "subcategory", "median_promo_price", baht, css("--s1"));
+  charts.subPromo = hbar("cSubPromo", rows.slice().sort((a, b) => b.promo_penetration_pct - a.promo_penetration_pct),
+                         "subcategory", "promo_penetration_pct", v => pct(v), css("--s2"));
+
+  const cols = [
+    {label: "Shelf", cell: r => esc(r.subcategory)},
+    {label: "Listings", num: true, cell: r => num(r.sku_count)},
+    {label: "Median price", num: true, cell: r => baht(r.median_promo_price)},
+    {label: "Cheapest", num: true, cell: r => baht(r.min_promo_price)},
+    {label: "Avg discount", num: true, cell: r => pct(r.avg_discount_pct)},
+    {label: "On promo", num: true, cell: r => pct(r.promo_penetration_pct)},
+  ];
+  document.getElementById("tSubPrice").innerHTML = table(cols, rows);
+  document.getElementById("tSubPromo").innerHTML = table(cols, rows);
+}
+
+/* ================= DAILY TREND ================= */
+// Colour follows the platform, never its position in the list, so a filter or a missing
+// day never repaints a series the reader has already learned.
+const PLATFORM_SLOT = {lazada: "--s1"};
+const platColor = p => css(PLATFORM_SLOT[p] || "--s1");
+
+function lineChart(canvasId, labels, datasets, yFmt, yTitle) {
+  // Auto-scaling a near-constant series turns rounding noise into a mountain range: three
+  // points at 371.0 / 370.9 / 370.8 filled the plot and every axis tick read "฿371".
+  // Give the axis a floor of 2% of the value, so a flat price draws flat and the tick
+  // labels are distinguishable.
+  const values = datasets.flatMap(d => d.data).filter(v => v !== null && v !== undefined && !isNaN(v));
+  let yBounds = {};
+  let decimals = 0;
+  if (values.length) {
+    const lo = Math.min(...values), hi = Math.max(...values);
+    const floor = Math.max(Math.abs(hi) * 0.02, 1);
+    if (hi - lo < floor) {
+      const mid = (lo + hi) / 2;
+      yBounds = {min: mid - floor / 2, max: mid + floor / 2};
+    }
+    const span = (yBounds.max !== undefined ? yBounds.max - yBounds.min : hi - lo);
+    decimals = span < 2 ? 2 : span < 20 ? 1 : 0;
+  }
+  // Only add precision; never override a formatter that is already showing units.
+  const tickFmt = decimals ? ((v) => yFmt(v, decimals)) : yFmt;
+
+  return new Chart(document.getElementById(canvasId), {
+    type: "line",
+    data: {labels, datasets},
+    options: {
+      spanGaps: false,          // a day with no collection must read as a gap, not a join
+      scales: {
+        x: noGrid({ticks: {color: css("--muted"), maxRotation: 45, minRotation: 0, font: {size: 10.5}}}),
+        y: axis(Object.assign({ticks: {color: css("--muted"), callback: tickFmt},
+                 title: {display: !!yTitle, text: yTitle || "", color: css("--muted")}}, yBounds)),
+      },
+      plugins: {
+        legend: datasets.length > 1
+          ? {display: true, position: "bottom",
+             labels: {boxWidth: 10, boxHeight: 10, color: css("--ink-2"), usePointStyle: true}}
+          : {display: false},
+        tooltip: {mode: "index", intersect: false,
+                  callbacks: {label: c => `${c.dataset.label}: ${yFmt(c.parsed.y)}`}},
+      },
+      interaction: {mode: "index", intersect: false},
+    },
+  });
+}
+
+const lineStyle = (label, data, color, dashed = false) => ({
+  label, data, borderColor: color, backgroundColor: color,
+  borderWidth: 2, borderDash: dashed ? [5, 4] : [],
+  pointRadius: 3, pointHoverRadius: 8,
+  pointBorderColor: css("--surface-1"), pointBorderWidth: 2, tension: .2,
+});
+
+function renderTrend() {
+  const daily = D.daily || [];
+  const host = document.getElementById("trendBody");
+  const dates = [...new Set(daily.map(r => r.date))].sort();
+
+  if (dates.length < 2) {
+    document.getElementById("trendTiles").innerHTML = "";
+    host.innerHTML = `<div class="empty"><strong>Not enough days yet</strong>
+      A trend needs at least two collections. There ${dates.length === 1 ? "is 1" : "are 0"} so far.
+      Run <code>scripts\\run.bat</code> once a day and this fills in by itself.</div>`;
+    return;
+  }
+
+  const platforms = [...new Set(daily.map(r => r.platform))].sort();
+  const at = (plat, date) => daily.find(r => r.platform === plat && r.date === date);
+  const seriesFor = (plat, key) => dates.map(d => {
+    const row = at(plat, d);
+    return row && row[key] !== null && row[key] !== undefined ? row[key] : null;
+  });
+
+  // Headline movement, first collected day to latest, on the platform with most history.
+  const main = platforms.map(p => [p, daily.filter(r => r.platform === p).length])
+    .sort((a, b) => b[1] - a[1])[0][0];
+  const mainRows = daily.filter(r => r.platform === main).sort((a, b) => a.date < b.date ? -1 : 1);
+  const first = mainRows[0], last = mainRows[mainRows.length - 1];
+  const delta = (a, b) => (a == null || b == null) ? null : b - a;
+  const dPrice = delta(first.median_promo_price, last.median_promo_price);
+  const dPromo = delta(first.promo_penetration_pct, last.promo_penetration_pct);
+  const dSkus = delta(first.skus, last.skus);
+  const arrow = v => v == null ? "" : (v > 0 ? "▲ " : v < 0 ? "▼ " : "");
+  const signed = (v, f) => v == null ? "—" : (v > 0 ? "+" : "") + f(v);
+
+  document.getElementById("trendTiles").innerHTML = [
+    ["Days tracked", num(dates.length), `${esc(dates[0])} to ${esc(dates[dates.length - 1])}`],
+    ["Median price now", baht(last.median_promo_price),
+     `${arrow(dPrice)}${signed(dPrice, v => baht(Math.abs(v)))} since ${esc(first.date)}`],
+    ["On promotion now", pct(last.promo_penetration_pct),
+     `${arrow(dPromo)}${signed(dPromo, v => Math.abs(v).toFixed(1) + " pts")}`],
+    ["Listings now", num(last.skus), `${arrow(dSkus)}${signed(dSkus, v => num(Math.abs(v)))}`],
+  ].map(([k, v, n]) =>
+    `<div class="tile"><div class="k">${esc(k)}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join("");
+
+  host.innerHTML = `
+    <div class="panel">
+      <h2>Median selling price by day</h2>
+      <p class="cap">The middle of the market. A gap means that platform was not collected
+         that day, which is not the same as a price of zero.</p>
+      <div class="chart h340"><canvas id="cTrendPrice"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>Price spread — ${esc(platLabel(main))}</h2>
+      <p class="cap">Median with the 25th and 75th percentiles either side. If all three move
+         together the whole market shifted; if only the median moves, the middle did.</p>
+      <div class="chart h340"><canvas id="cTrendSpread"></canvas></div>
+    </div>
+    <div class="row2">
+      <div class="panel">
+        <h2>Share on promotion by day</h2>
+        <p class="cap">How much of the shelf is discounted.</p>
+        <div class="chart h300"><canvas id="cTrendPromo"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>Listings tracked by day</h2>
+        <p class="cap">Coverage. Sharp steps are usually assortment churn or a config change,
+           not the market doubling.</p>
+        <div class="chart h300"><canvas id="cTrendSkus"></canvas></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>The numbers</h2>
+      <div class="scrollx" id="tTrend"></div>
+    </div>`;
+
+  charts.trendPrice = lineChart("cTrendPrice", dates,
+    platforms.map(p => lineStyle(platLabel(p), seriesFor(p, "median_promo_price"), platColor(p))),
+    baht);
+
+  // Emphasis rather than three competing hues: the median carries the colour, the
+  // quartiles recede to muted so they read as context.
+  charts.trendSpread = lineChart("cTrendSpread", dates, [
+    lineStyle("75th percentile", seriesFor(main, "p75_promo_price"), css("--muted"), true),
+    lineStyle("Median", seriesFor(main, "median_promo_price"), platColor(main)),
+    lineStyle("25th percentile", seriesFor(main, "p25_promo_price"), css("--muted"), true),
+  ], baht);
+
+  charts.trendPromo = lineChart("cTrendPromo", dates,
+    platforms.map(p => lineStyle(platLabel(p), seriesFor(p, "promo_penetration_pct"), platColor(p))),
+    (v, d) => pct(v, d === undefined ? 0 : d));
+
+  charts.trendSkus = lineChart("cTrendSkus", dates,
+    platforms.map(p => lineStyle(platLabel(p), seriesFor(p, "skus"), platColor(p))),
+    (v, d) => num(v, d === undefined ? 0 : d));
+
+  document.getElementById("tTrend").innerHTML = table([
+    {label: "Date", cell: r => esc(r.date)},
+    {label: "Where", cell: r => esc(platLabel(r.platform))},
+    {label: "Listings", num: true, cell: r => num(r.skus)},
+    {label: "25th", num: true, cell: r => baht(r.p25_promo_price)},
+    {label: "Median", num: true, cell: r => `<strong>${baht(r.median_promo_price)}</strong>`},
+    {label: "75th", num: true, cell: r => baht(r.p75_promo_price)},
+    {label: "List price", num: true, cell: r => baht(r.median_retail_price)},
+    {label: "On promo", num: true, cell: r => pct(r.promo_penetration_pct)},
+    {label: "Avg off", num: true, cell: r => pct(r.avg_discount_pct)},
+    {label: "Brands", num: true, cell: r => num(r.brands)},
+    {label: "Sellers", num: true, cell: r => num(r.sellers)},
+  ], daily.slice().sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+/* ---------- product-level daily movement ---------- */
+// Eight categorical slots in fixed order, assigned to a SKU when it is selected and kept
+// for as long as it stays selected, so deselecting one never repaints the others.
+const SERIES_SLOTS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7", "--s8"];
+const MAX_PICKED = 8;
+const picked = new Map();          // item_id -> slot index
+
+// Lazada shows whichever variant is cheapest, so a line can jump because a different pack
+// size took over. Those SKUs are marked rather than read as price movement.
+let variantSet = null;
+const variantSwitched = id => {
+  if (!variantSet) variantSet = new Set((D.variantSwitched || []).map(String));
+  return variantSet.has(String(id));
+};
+
+function skuHistory(id) {
+  const raw = (D.series || {})[id];
+  return Array.isArray(raw) && raw.length > 1 ? raw : null;
+}
+
+function movementOf(id) {
+  const h = skuHistory(id);
+  if (!h) return null;
+  const points = h.filter(p => p[1] !== null && p[1] !== undefined);
+  if (points.length < 2) return null;
+  const first = points[0], last = points[points.length - 1];
+  const change = last[1] - first[1];
+  return {
+    firstDate: first[0], firstPrice: first[1], lastDate: last[0], lastPrice: last[1],
+    change, changePct: first[1] ? round1(100 * change / first[1]) : null,
+    days: h.length,
+    low: Math.min(...points.map(p => p[1])), high: Math.max(...points.map(p => p[1])),
+  };
+}
+const round1 = v => Math.round(v * 10) / 10;
+
+function chartableSkus() {
+  return (D.skus || []).filter(s => skuHistory(s.id));
+}
+
+function freeSlot() {
+  const used = new Set(picked.values());
+  for (let i = 0; i < SERIES_SLOTS.length; i++) if (!used.has(i)) return i;
+  return -1;
+}
+
+function togglePick(id) {
+  if (picked.has(id)) {
+    picked.delete(id);
+  } else {
+    const slot = freeSlot();
+    if (slot < 0) return false;         // at the cap
+    picked.set(id, slot);
+  }
+  drawSkuTrend();
+  drawPicker();
+  return true;
+}
+
+function matchingSkus(ignoreMovedFilter) {
+  // Case-insensitive by construction: the term and every field are lowercased before
+  // comparing, so "Bomi", "bomi" and "BOMI" are the same search.
+  const q = document.getElementById("pSearch").value.trim().toLowerCase();
+  const b = document.getElementById("pBrand").value;
+  const sh = document.getElementById("pShelf").value;
+  const movedOnly = ignoreMovedFilter ? false : document.getElementById("pMovedOnly").checked;
+  return chartableSkus().filter(s => {
+    if (b && s.brand !== b) return false;
+    if (sh && s.subcat !== sh) return false;
+    if (q && !((s.name || "").toLowerCase().includes(q) ||
+               (s.brand || "").toLowerCase().includes(q) ||
+               (s.seller || "").toLowerCase().includes(q))) return false;
+    if (movedOnly) {
+      const m = movementOf(s.id);
+      if (!m || Math.abs(m.change) < 0.5) return false;
+      if (variantSwitched(s.id)) return false;   // a pack-size change is not a price move
+    }
+    return true;
+  }).sort((a, b2) => (b2.sold || 0) - (a.sold || 0));
+}
+
+const PICK_LIMIT = 150;
+
+function drawPicker() {
+  const rows = matchingSkus();
+  document.getElementById("pCount").textContent =
+    `${num(picked.size)} of ${MAX_PICKED} charted · ${num(rows.length)} products match` +
+    (rows.length > PICK_LIMIT ? ` · listing first ${PICK_LIMIT}` : "");
+  document.getElementById("pPickSummary").textContent =
+    `Choose products (${num(rows.length)} available)`;
+
+  // An empty list has to say WHY. Nearly always it is the "price changed only" switch
+  // hiding listings that simply held their price, which reads as broken search.
+  if (!rows.length) {
+    const wouldMatch = matchingSkus(true).length;
+    const host = document.getElementById("pPick");
+    host.innerHTML = wouldMatch
+      ? `<div class="empty"><strong>Nothing matched, but ${num(wouldMatch)} would</strong>
+           Those ${num(wouldMatch)} listings held their price over every day collected, and
+           <em>Price changed only</em> is hiding them.
+           <br><br><button class="themebtn" type="button" id="pShowFlat">Show them anyway</button></div>`
+      : `<div class="empty"><strong>Nothing matched</strong>
+           No listing matches that search. Try part of a brand or product name — the search
+           is case-insensitive and looks at product, brand and seller.</div>`;
+    const btn = document.getElementById("pShowFlat");
+    if (btn) btn.addEventListener("click", () => {
+      const cb = document.getElementById("pMovedOnly");
+      cb.checked = false;
+      cb.dispatchEvent(new Event("input", {bubbles: true}));
+    });
+    return;
+  }
+
+  document.getElementById("pPick").innerHTML = table([
+    {label: "", cell: r => {
+      const on = picked.has(r.id);
+      const colour = on ? css(SERIES_SLOTS[picked.get(r.id)]) : "transparent";
+      return `<span class="swatch" style="background:${colour};border-color:${on ? colour : "var(--axis)"}"></span>`;
+    }},
+    {label: "Brand", cell: r => esc(r.brand)},
+    {label: "Product", cell: r => `<div class="name">${esc(r.name)}</div>`},
+    {label: "Seller", cell: r => esc(r.seller)},
+    {label: "Now", num: true, cell: r => baht(r.promo)},
+    {label: "Change", num: true, cell: r => {
+      const m = movementOf(r.id);
+      if (!m) return "—";
+      if (variantSwitched(r.id)) return `<span class="chip spon">pack size changed</span>`;
+      const cls = m.change < 0 ? "down" : m.change > 0 ? "up" : "";
+      return m.change === 0 ? "flat"
+        : `<span class="chip ${cls}">${m.change < 0 ? "" : "+"}${baht(m.change)} (${pct(m.changePct)})</span>`;
+    }},
+    {label: "Days", num: true, cell: r => num((movementOf(r.id) || {}).days)},
+    {label: "Sold", num: true, cell: r => r.sold == null ? "—" : num(r.sold)},
+  ], rows.slice(0, PICK_LIMIT), {rowAttr: r => `data-pick="${esc(r.id)}"`});
+
+  document.querySelectorAll("#pPick tbody tr").forEach(tr =>
+    tr.addEventListener("click", () => {
+      if (!togglePick(tr.dataset.pick)) {
+        // Inline, not alert(): a modal blocks the page and is the wrong weight for a
+        // soft limit the reader can resolve by deselecting something.
+        const note = document.getElementById("pCount");
+        note.textContent = `Maximum ${MAX_PICKED} at once — deselect one first`;
+        note.style.color = css("--critical");
+        setTimeout(() => { note.style.color = ""; drawPicker(); }, 2500);
+      }
+    }));
+}
+
+function drawSkuTrend() {
+  if (charts.skuTrend) { charts.skuTrend.destroy(); charts.skuTrend = null; }
+  const ids = [...picked.keys()];
+  const host = document.getElementById("tSkuTrend");
+
+  if (!ids.length) {
+    host.innerHTML = `<p class="cap">Nothing selected. Pick a product from the list below to
+      chart its daily price.</p>`;
+    return;
+  }
+
+  const dates = [...new Set(ids.flatMap(id => skuHistory(id).map(p => p[0])))].sort();
+  const byId = Object.fromEntries((D.skus || []).map(s => [String(s.id), s]));
+
+  const datasets = ids.map(id => {
+    const hist = Object.fromEntries(skuHistory(id).map(p => [p[0], p[1]]));
+    const sku = byId[String(id)] || {};
+    const label = `${sku.brand || "—"} · ${(sku.name || id).slice(0, 34)}`;
+    return lineStyle(label, dates.map(d => (d in hist ? hist[d] : null)),
+                     css(SERIES_SLOTS[picked.get(id)]));
+  });
+
+  charts.skuTrend = lineChart("cSkuTrend", dates, datasets, baht);
+
+  host.innerHTML = table([
+    {label: "", cell: r => `<span class="swatch" style="background:${css(SERIES_SLOTS[picked.get(r.id)])};border-color:${css(SERIES_SLOTS[picked.get(r.id)])}"></span>`},
+    {label: "Brand", cell: r => esc(r.sku.brand)},
+    {label: "Product", cell: r => `<div class="name"><a href="${esc(r.sku.url)}" target="_blank" rel="noopener">${esc(r.sku.name)}</a></div>`},
+    {label: "First seen", cell: r => `${esc(r.m.firstDate)} · ${baht(r.m.firstPrice)}`},
+    {label: "Latest", num: true, cell: r => `<strong>${baht(r.m.lastPrice)}</strong>`},
+    {label: "Change", num: true, cell: r => variantSwitched(r.id)
+      ? `<span class="chip spon">pack size changed</span>`
+      : r.m.change === 0 ? "flat"
+      : `<span class="chip ${r.m.change < 0 ? "down" : "up"}">${r.m.change < 0 ? "" : "+"}${baht(r.m.change)}</span>`},
+    {label: "%", num: true, cell: r => variantSwitched(r.id) ? "—" : pct(r.m.changePct)},
+    {label: "Low", num: true, cell: r => baht(r.m.low)},
+    {label: "High", num: true, cell: r => baht(r.m.high)},
+    {label: "Days", num: true, cell: r => num(r.m.days)},
+  ], ids.map(id => ({id, sku: byId[String(id)] || {}, m: movementOf(id)})).filter(r => r.m));
+}
+
+function renderProductTrend() {
+  const pool = chartableSkus();
+  fillSelect(document.getElementById("pBrand"),
+             [...new Set(pool.map(s => s.brand).filter(Boolean))].sort(), "All brands");
+  fillSelect(document.getElementById("pShelf"),
+             [...new Set(pool.map(s => s.subcat).filter(Boolean))].sort(), "All shelves");
+
+  // A theme switch re-runs every render function, so guard against stacking listeners.
+  if (!renderProductTrend.wired) {
+    ["pSearch", "pBrand", "pShelf", "pMovedOnly"].forEach(id =>
+      document.getElementById(id).addEventListener("input", () => { drawPicker(); }));
+    document.getElementById("pClear").addEventListener("click", () => {
+      picked.clear(); drawSkuTrend(); drawPicker();
+    });
+    renderProductTrend.wired = true;
+  }
+
+  // Start with something worth looking at: the biggest movers among the best sellers.
+  if (!picked.size) {
+    matchingSkus()
+      .filter(s => (s.sold || 0) > 0)
+      .sort((a, b) => Math.abs((movementOf(b.id) || {}).changePct || 0) -
+                      Math.abs((movementOf(a.id) || {}).changePct || 0))
+      .slice(0, 5)
+      .forEach((s, i) => picked.set(s.id, i));
+  }
+  drawSkuTrend();
+  drawPicker();
+}
+
+/* ================= MOVES ================= */
+function renderMoves() {
+  const host = document.getElementById("movesBody");
+  if (!D.meta.has_comparison) {
+    host.innerHTML = `<div class="empty"><strong>No comparison yet</strong>
+      This is the first collection (${esc(D.meta.latest_date)}), so there is nothing to compare against.
+      Price movement, new listings and delistings appear here after the second run.
+      <br><br>Run <code>scripts\\run.bat</code> again tomorrow.</div>`;
+    return;
+  }
+  const ch = D.changes || [];
+  const by = s => ch.filter(r => r.status === s);
+  const drops = by("price_drop"), rises = by("price_rise");
+  // Counts come from the pipeline's full tally, never from `ch` - that list is capped for
+  // page weight and counting it silently undercounts whichever status overflows.
+  const n = D.changeCounts || {};
+  const summary = [
+    ["Price drops", n.price_drop || 0, "down"], ["Price rises", n.price_rise || 0, "up"],
+    ["Promos started", n.promo_started || 0, "new"], ["Promos ended", n.promo_ended || 0, "gone"],
+    ["New listings", n.new || 0, "new"], ["Delisted", n.gone || 0, "gone"],
+    ["Pack size changed", n.variant_switch || 0, "spon"],
+  ];
+
+  const moved = drops.concat(rises)
+    .filter(r => r.promo_change_pct !== null && r.promo_change_pct !== undefined)
+    .sort((a, b) => Math.abs(b.promo_change_pct) - Math.abs(a.promo_change_pct)).slice(0, 15);
+
+  host.innerHTML = `
+    <div class="tiles">${summary.map(([k, v]) =>
+      `<div class="tile"><div class="k">${esc(k)}</div><div class="v">${num(v)}</div></div>`).join("")}</div>
+    ${moved.length ? `<div class="panel">
+      <h2>Biggest moves since ${esc(D.meta.prev_date)}</h2>
+      <p class="cap">Change in selling price. Blue is a cut, red is an increase. Listings
+         where a different pack size took over are excluded, because that is not a repricing.</p>
+      <div class="chart h380"><canvas id="cMoves"></canvas></div>
+    </div>` : ""}
+    <div class="panel">
+      <h2>Everything that changed</h2>
+      <p class="cap">${num(D.changesTotal ?? ch.length)} listings moved between ${esc(D.meta.prev_date)} and ${esc(D.meta.latest_date)}.
+        ${(D.changesTotal || 0) > ch.length
+          ? `Showing the first ${num(ch.length)}; the full list is in <code>data/processed/price_changes.csv</code>.`
+          : ""}</p>
+      <div class="scroll" id="tMoves"></div>
+    </div>`;
+
+  if (moved.length) {
+    new Chart(document.getElementById("cMoves"), {
+      type: "bar",
+      data: {
+        labels: moved.map(r => (r.brand_name || "—") + " · " + String(r.product_name || "").slice(0, 34)),
+        datasets: [{
+          data: moved.map(r => r.promo_change_pct),
+          backgroundColor: moved.map(r => r.promo_change_pct < 0 ? css("--down") : css("--up")),
+          borderRadius: 4, categoryPercentage: .82, barPercentage: .9,
+        }],
+      },
+      options: {
+        indexAxis: "y",
+        scales: {
+          x: axis({title: {display: true, text: "% change in selling price", color: css("--muted")},
+                   ticks: {color: css("--muted"), callback: v => v + "%"}}),
+          y: noGrid({ticks: {color: css("--ink-2"), font: {size: 11}}}),
+        },
+        plugins: {tooltip: {callbacks: {
+          title: c => moved[c[0].dataIndex].product_name,
+          label: c => `${baht(moved[c.dataIndex].prev_promo)} → ${baht(moved[c.dataIndex].promo_price)}  (${pct(c.parsed.x)})`,
+        }}},
+      },
+    });
+  }
+
+  const chip = s => ({price_drop: ["down", "price cut"], price_rise: ["up", "price up"],
+                      promo_started: ["new", "promo on"], promo_ended: ["gone", "promo off"],
+                      new: ["new", "new"], gone: ["gone", "delisted"],
+                      variant_switch: ["spon", "pack size"]}[s] || ["", s]);
+  document.getElementById("tMoves").innerHTML = table([
+    {label: "", cell: r => {const [c, t] = chip(r.status); return `<span class="chip ${c}">${esc(t)}</span>`;}},
+    {label: "Brand", cell: r => esc(r.brand_name)},
+    {label: "Product", cell: r => `<div class="name"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.product_name)}</a></div>`},
+    {label: "Seller", cell: r => esc(r.seller_name)},
+    {label: "Was", num: true, cell: r => baht(r.prev_promo)},
+    {label: "Now", num: true, cell: r => baht(r.promo_price)},
+    {label: "Change", num: true, cell: r => r.promo_change_pct == null ? "—" :
+      `<span class="chip ${r.promo_change_pct < 0 ? "down" : "up"}">${pct(r.promo_change_pct)}</span>`},
+    {label: "Discount", num: true, cell: r => pct(r.discount_pct)},
+  ], ch);
+}
+
+/* ================= BRANDS ================= */
+function renderBrands() {
+  const all = (D.brands || []).slice().sort((a, b) => b.sku_count - a.sku_count);
+  const top = all.slice(0, 12);
+  const rest = all.slice(12);
+  const rows = rest.length
+    ? top.concat([{brand_name: `Other (${rest.length} brands)`,
+                   sku_count: rest.reduce((s, r) => s + r.sku_count, 0)}])
+    : top;
+  if (rows.length) {
+    charts.brands = hbar("cBrands", rows.slice().reverse(), "brand_name", "sku_count", v => num(v) + " listings", css("--s1"));
+  }
+  document.getElementById("tBrands").innerHTML = table([
+    {label: "Brand", cell: r => esc(r.brand_name)},
+    {label: "Listings", num: true, cell: r => num(r.sku_count)},
+    {label: "Share of shelf", num: true, cell: r => pct(r.share_of_shelf_pct)},
+    {label: "Median price", num: true, cell: r => baht(r.median_promo_price)},
+    {label: "Avg discount", num: true, cell: r => pct(r.avg_discount_pct)},
+    {label: "On promo", num: true, cell: r => pct(r.promo_penetration_pct)},
+    {label: "Avg rating", num: true, cell: r => r.avg_rating ? r.avg_rating.toFixed(2) : "—"},
+    {label: "Reviews", num: true, cell: r => num(r.total_reviews)},
+  ], all);
+
+  /* Rating vs price — one series, so no legend. Limited to the most-reviewed listings
+     because 700+ overlapping markers cannot be read. */
+  const pts = (D.skus || []).filter(s => s.rating && s.promo && s.reviews >= 1)
+    .sort((a, b) => b.reviews - a.reviews).slice(0, 250);
+  document.getElementById("scatterCap").textContent =
+    `The ${pts.length} most-reviewed listings. Bubble size is review count. A cluster low and ` +
+    `right is where buyers are happy and the price is high.`;
+  const maxR = Math.max(...pts.map(p => p.reviews), 1);
+  if (pts.length) {
+    charts.scatter = new Chart(document.getElementById("cScatter"), {
+      type: "bubble",
+      data: {datasets: [{
+        data: pts.map(p => ({x: p.promo, y: p.rating, r: 5 + 13 * Math.sqrt(p.reviews / maxR), _p: p})),
+        backgroundColor: withAlpha(css("--s1"), 0.55),
+        borderColor: css("--surface-1"), borderWidth: 2, hoverBorderWidth: 2,
+      }]},
+      options: {
+        scales: {
+          x: axis({type: "logarithmic", title: {display: true, text: "selling price (log scale)", color: css("--muted")},
+                   ticks: {color: css("--muted"), callback: v => baht(v)}}),
+          y: axis({min: 3, max: 5.05, title: {display: true, text: "rating", color: css("--muted")}}),
+        },
+        plugins: {tooltip: {callbacks: {
+          title: c => c[0].raw._p.name.slice(0, 70),
+          label: c => {const p = c.raw._p;
+            return [`${p.brand} · ${p.seller}`, `${baht(p.promo)} · ${p.rating}★ · ${num(p.reviews)} reviews`];},
+        }}},
+        interaction: {mode: "nearest", intersect: true},
+      },
+    });
+  }
+  document.getElementById("tScatter").innerHTML = table([
+    {label: "Brand", cell: r => esc(r.brand)},
+    {label: "Product", cell: r => `<div class="name">${esc(r.name)}</div>`},
+    {label: "Price", num: true, cell: r => baht(r.promo)},
+    {label: "Rating", num: true, cell: r => r.rating.toFixed(2)},
+    {label: "Reviews", num: true, cell: r => num(r.reviews)},
+  ], pts);
+
+  document.getElementById("tSellers").innerHTML = table([
+    {label: "Seller", cell: r => esc(r.seller_name)},
+    {label: "Listings", num: true, cell: r => num(r.sku_count)},
+    {label: "Share", num: true, cell: r => pct(r.share_of_shelf_pct)},
+    {label: "Median price", num: true, cell: r => baht(r.median_promo_price)},
+    {label: "Avg discount", num: true, cell: r => pct(r.avg_discount_pct)},
+    {label: "Avg rating", num: true, cell: r => r.avg_rating ? r.avg_rating.toFixed(2) : "—"},
+    {label: "Reviews", num: true, cell: r => num(r.total_reviews)},
+  ], (D.sellers || []).slice(0, 60));
+}
+
+/* ================= SKU EXPLORER ================= */
+const MAX_ROWS = 300;
+let sortKey = "sold", sortDir = -1, selectedSku = null;
+
+function fillSelect(el, values, allLabel, label = v => v) {
+  el.innerHTML = `<option value="">${allLabel}</option>` +
+    values.map(v => `<option value="${esc(v)}">${esc(label(v))}</option>`).join("");
+}
+
+function renderSkus() {
+  const brands = [...new Set(D.skus.map(s => s.brand).filter(Boolean))].sort();
+  const subs = [...new Set(D.skus.map(s => s.subcat).filter(Boolean))].sort();
+  const plats = [...new Set(D.skus.map(s => s.plat).filter(Boolean))].sort();
+  fillSelect(document.getElementById("fBrand"), brands, "All brands");
+  fillSelect(document.getElementById("fSubcat"), subs, "All shelves");
+  // The platform filter only earns its space once a second platform exists.
+  const platSel = document.getElementById("fPlatform");
+  fillSelect(platSel, plats, "All platforms", platLabel);
+  platSel.classList.toggle("hide", plats.length < 2);
+  ["fSearch", "fPlatform", "fBrand", "fSubcat", "fPromo"].forEach(id =>
+    document.getElementById(id).addEventListener("input", drawSkus));
+  drawSkus();
+}
+
+function drawSkus() {
+  const q = document.getElementById("fSearch").value.trim().toLowerCase();
+  const p = document.getElementById("fPlatform").value;
+  const b = document.getElementById("fBrand").value;
+  const s = document.getElementById("fSubcat").value;
+  const promoOnly = document.getElementById("fPromo").checked;
+
+  let rows = D.skus.filter(r =>
+    (!p || r.plat === p) && (!b || r.brand === b) && (!s || r.subcat === s) &&
+    (!promoOnly || (r.disc || 0) > 0) &&
+    (!q || (r.name || "").toLowerCase().includes(q) || (r.seller || "").toLowerCase().includes(q)));
+
+  rows.sort((x, y) => {
+    const a = x[sortKey], c = y[sortKey];
+    if (a === c) return 0;
+    if (a === null || a === undefined) return 1;
+    if (c === null || c === undefined) return -1;
+    return (a > c ? 1 : -1) * sortDir;
+  });
+
+  document.getElementById("skuCount").textContent =
+    `${num(rows.length)} of ${num(D.skus.length)} listings` +
+    (rows.length > MAX_ROWS ? ` · showing the first ${MAX_ROWS}` : "");
+
+  const multiPlatform = new Set(D.skus.map(s => s.plat)).size > 1;
+  const cols = [
+    ...(multiPlatform ? [{label: "Where", key: "plat", cell: r => esc(platLabel(r.plat))}] : []),
+    {label: "Brand", key: "brand", cell: r => esc(r.brand)},
+    {label: "Product", key: "name", cell: r => `<div class="name"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a></div>`
+        + (r.spon ? ' <span class="chip spon">ad</span>' : "")},
+    {label: "Seller", key: "seller", cell: r => esc(r.seller)},
+    {label: "Shelf", key: "subcat", cell: r => esc(r.subcat)},
+    {label: "List", key: "retail", num: true, cell: r => baht(r.retail)},
+    {label: "Selling", key: "promo", num: true, cell: r => `<strong>${baht(r.promo)}</strong>`},
+    {label: "Off", key: "disc", num: true, cell: r => (r.disc || 0) > 0 ? `<span class="chip down">${pct(r.disc, 0)}</span>` : "—"},
+    {label: "Sold", key: "sold", num: true, cell: r => r.sold == null ? "—" : num(r.sold)},
+    {label: "Rating", key: "rating", num: true, cell: r => r.rating ? r.rating.toFixed(2) : "—"},
+    {label: "Reviews", key: "reviews", num: true, cell: r => num(r.reviews)},
+  ];
+  document.getElementById("tSkus").innerHTML = table(cols, rows.slice(0, MAX_ROWS),
+    {rowAttr: r => `data-id="${esc(r.id)}"`});
+
+  document.querySelectorAll("#tSkus th").forEach((th, i) => {
+    th.addEventListener("click", () => {
+      const key = cols[i].key;
+      if (!key) return;
+      sortDir = (sortKey === key) ? -sortDir : -1;
+      sortKey = key;
+      drawSkus();
+    });
+  });
+  document.querySelectorAll("#tSkus tbody tr").forEach(tr =>
+    tr.addEventListener("click", e => {
+      if (e.target.closest("a")) return;
+      showHistory(tr.dataset.id);
+    }));
+}
+
+function showHistory(id) {
+  selectedSku = id;
+  const sku = D.skus.find(s => String(s.id) === String(id));
+  const series = (D.series || {})[id];
+  const cap = document.getElementById("histCap");
+  if (charts.history) {charts.history.destroy(); charts.history = null;}
+
+  if (!sku) return;
+  if (!series || series.length < 2) {
+    cap.innerHTML = `<strong>${esc(sku.name)}</strong><br>Only one observation so far (${esc(D.meta.latest_date)},
+      selling at ${baht(sku.promo)}). A line appears once this listing has been collected twice.`;
+    return;
+  }
+  cap.innerHTML = `<strong>${esc(sku.name)}</strong><br>${esc(sku.brand)} · ${esc(sku.seller)} ·
+    ${series.length} observations`;
+  charts.history = new Chart(document.getElementById("cHistory"), {
+    type: "line",
+    data: {
+      labels: series.map(p => p[0]),
+      datasets: [
+        {label: "Selling price", data: series.map(p => p[1]), borderColor: css("--s1"),
+         backgroundColor: css("--s1"), borderWidth: 2, pointRadius: 4, pointHoverRadius: 8,
+         pointBorderColor: css("--surface-1"), pointBorderWidth: 2, tension: .15},
+        {label: "List price", data: series.map(p => p[2]), borderColor: css("--s2"),
+         backgroundColor: css("--s2"), borderWidth: 2, borderDash: [], pointRadius: 3,
+         pointHoverRadius: 8, pointBorderColor: css("--surface-1"), pointBorderWidth: 2, tension: .15},
+      ],
+    },
+    options: {
+      scales: {x: noGrid(), y: axis({ticks: {color: css("--muted"), callback: v => baht(v)}})},
+      plugins: {
+        legend: {display: true, position: "bottom", labels: {boxWidth: 10, boxHeight: 10, color: css("--ink-2")}},
+        tooltip: {mode: "index", intersect: false, callbacks: {label: c => `${c.dataset.label}: ${baht(c.parsed.y)}`}},
+      },
+      interaction: {mode: "index", intersect: false},
+    },
+  });
+}
+
+/* ================= shell ================= */
+/* Charts are built the first time their tab is shown, never before. Chart.js measures
+   the canvas at construction, and a canvas inside a display:none tab measures 0x0 —
+   a size it will not recover from, with or without a later resize() call. */
+const TABS = {market: [renderHist, renderSubcats], trend: [renderProductTrend, renderTrend],
+              moves: [renderMoves], brands: [renderBrands], skus: []};
+const rendered = new Set();
+let activeTab = "market";
+
+function renderTab(name) {
+  activeTab = name;
+  if (rendered.has(name)) return;
+  rendered.add(name);
+  (TABS[name] || []).forEach(fn => fn());
+}
+
+function showTab(name) {
+  document.querySelectorAll(".tabs button").forEach(b =>
+    b.setAttribute("aria-selected", String(b.dataset.tab === name)));
+  Object.keys(TABS).forEach(t => document.getElementById("tab-" + t).classList.toggle("hide", t !== name));
+  renderTab(name);
+}
+
+function rebuild() {
+  applyChartDefaults();
+  Object.values(charts).forEach(c => c && c.destroy());
+  for (const k in charts) delete charts[k];
+  rendered.clear();
+  renderMeta(); renderTiles(); renderTab(activeTab);
+}
+
+document.querySelectorAll(".tabs button").forEach(btn =>
+  btn.addEventListener("click", () => showTab(btn.dataset.tab)));
+
+document.getElementById("themeBtn").addEventListener("click", () => {
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const now = document.documentElement.getAttribute("data-theme") || (dark ? "dark" : "light");
+  document.documentElement.setAttribute("data-theme", now === "dark" ? "light" : "dark");
+  rebuild();
+  if (selectedSku) showHistory(selectedSku);
+});
+
+function boot() {
+  D = window.ECOM_DATA;
+  if (!D) {
+    document.querySelector(".wrap").innerHTML =
+      '<div class="empty"><strong>No data yet</strong>Run <code>scripts\\run.bat</code> to collect and process, then reload this page.</div>';
+    return;
+  }
+  applyChartDefaults();
+  renderMeta();
+  renderTiles();
+  renderSkus();      // filters and table only, no canvas
+  renderTab("market");
+}
+
+// The timestamp defeats the browser cache. Without it a re-run leaves the page showing
+// the previous collection, which is the worst kind of wrong: it looks fine.
+const dataScript = document.createElement("script");
+dataScript.src = "../data/processed/app_data.js?t=" + Date.now();
+dataScript.onload = boot;
+dataScript.onerror = () => {
+  document.querySelector(".wrap").innerHTML =
+    '<div class="empty"><strong>Could not load the data</strong>' +
+    'Expected <code>data/processed/app_data.js</code>. Run <code>scripts\\run.bat</code> first.</div>';
+};
+document.body.appendChild(dataScript);
+</script>
+</body>
+</html>

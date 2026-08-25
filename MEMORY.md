@@ -89,6 +89,22 @@ _None yet._
   - **`run.bat dashboard` pulls before opening.** Once the runner started committing data, the
     local clone went stale on its own, and the dashboard reads local files. The full `run.bat`
     path deliberately does not pull, because after a local collection the newest data is on disk.
+- **The public dashboard link is `https://swuttipat.github.io/ecom-price-tracker/`, added
+  2026-08-24 at Max's request.** GitHub Pages, "Deploy from branch", serving `/docs`.
+  - **The repo was public when this was set up, which was a mistake** - it was meant to be
+    private from the first commit. GitHub Pages on a private repo still serves a public URL
+    unless the account is on GitHub Enterprise, so switching to private afterwards would not
+    have hidden anything already pushed; it only stops new leakage. Max was told this before
+    Pages was enabled. If the repo is ever made private, the Pages URL keeps working exactly
+    the same, because Pages visibility does not follow repo visibility on this plan.
+  - **`docs/index.html` exists only because Pages cannot serve `dashboard/`.** It is a copy,
+    kept in sync by the daily workflow's "Sync the dashboard into docs/" step. Its
+    `../data/processed/app_data.js` reference resolves the same way `dashboard/index.html`'s
+    does, both being one level under the repo root, so no path rewriting was needed.
+  - **Anyone with the link can read every SKU, brand, seller and price in the dataset.** There
+    is no login. Treat the link as public from here on: do not put anything in `data/` that
+    would matter if it were public, and do not assume the private-repo intent still applies to
+    dashboard content once Pages is live.
   - **`TZ: Asia/Bangkok` is set at job level and must stay.** The runner is UTC and the snapshot
     file is named by date, so without it a manual run before 07:00 Bangkok would misdate the day.
   - **The workflow retries exit 1 and never exit 2.** `common.EXIT_WALL` is 2, returned only for
