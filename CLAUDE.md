@@ -42,12 +42,16 @@ workstation says what the market is doing, `probiotic project` decides what to s
    than re-scraping.
 5. Run `run.bat test` after changing `pipeline.py`. It checks the day-over-day logic against
    a synthetic dataset and never touches `data/`.
-5a. **`docs/index.html` is a copy of `dashboard/index.html`, not a second implementation.**
-   GitHub Pages (Deploy from branch) only serves `/(root)` or `/docs`, and `dashboard/` is
-   neither, so `docs/index.html` exists purely to satisfy that. The daily workflow re-copies
-   it on every run, so a data-only day never drifts. If you edit `dashboard/index.html` by
-   hand, `cp dashboard/index.html docs/index.html` before committing, or the published page
-   falls behind until the next scheduled run overwrites it.
+5a. **`docs/index.html` publishes the dashboard via GitHub Pages, but it is NOT a
+   byte-identical copy of `dashboard/index.html`.** Pages (Deploy from branch, /docs)
+   publishes `docs/` as an isolated site root - nothing outside that folder is ever served,
+   so `dashboard/index.html`'s `../data/processed/app_data.js` reference 404s from there.
+   `docs/index.html` carries one deliberate difference: that reference is rewritten to a
+   same-level path, and `app_data.js` is duplicated into `docs/data/processed/`. The daily
+   workflow's sync step does the copy, the rewrite and the duplication together, every run.
+   If you edit `dashboard/index.html` by hand, do NOT just `cp` it over `docs/index.html` -
+   run the same `sed` rewrite the workflow does, or the published page breaks the same way
+   it did on first deploy (2026-08-25, see MEMORY.md).
 6. Adding a platform means writing a collector that emits the schema in `common.py`. Do not
    widen the schema for one platform, and do not let a platform-specific quirk reach the
    pipeline.

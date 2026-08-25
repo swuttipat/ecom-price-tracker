@@ -96,12 +96,17 @@ jobs:
 
       - name: Sync the dashboard into docs/ for GitHub Pages
         # docs/index.html is a copy of dashboard/index.html, not a second implementation.
-        # GitHub Pages (Deploy from branch) only serves /(root) or /docs, and dashboard/
-        # is neither, so this keeps the published copy from ever drifting behind the
-        # working one. Its "../data/processed/app_data.js" reference resolves the same
-        # way from docs/ as it does from dashboard/, both being one level under the repo
-        # root, so the data path needs no rewriting.
-        run: cp dashboard/index.html docs/index.html
+        # GitHub Pages (Deploy from branch, /docs) publishes docs/ as an ISOLATED site
+        # root: it never sees anything outside that folder. dashboard/index.html's
+        # "../data/processed/app_data.js" reference walks off the published site and
+        # 404s (found live, 2026-08-25). So the data file is duplicated one level down
+        # into docs/, and the one line that loads it is rewritten to match - docs/
+        # is not a byte-identical copy of dashboard/, and must not be treated as one.
+        run: |
+          cp dashboard/index.html docs/index.html
+          sed -i 's|\.\./data/processed/app_data\.js|data/processed/app_data.js|' docs/index.html
+          mkdir -p docs/data/processed
+          cp data/processed/app_data.js docs/data/processed/app_data.js
 
       - name: Commit the new snapshot
         run: |

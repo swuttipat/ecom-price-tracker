@@ -98,9 +98,20 @@ _None yet._
     Pages was enabled. If the repo is ever made private, the Pages URL keeps working exactly
     the same, because Pages visibility does not follow repo visibility on this plan.
   - **`docs/index.html` exists only because Pages cannot serve `dashboard/`.** It is a copy,
-    kept in sync by the daily workflow's "Sync the dashboard into docs/" step. Its
-    `../data/processed/app_data.js` reference resolves the same way `dashboard/index.html`'s
-    does, both being one level under the repo root, so no path rewriting was needed.
+    kept in sync by the daily workflow's "Sync the dashboard into docs/" step.
+  - **First deploy 2026-08-25 shipped broken: "Could not load the data" live on the real URL.**
+    The wrong assumption was that `../data/processed/app_data.js` would resolve from `docs/`
+    the same way it does from `dashboard/`, because both sit one level under the repo root on
+    a local clone. **That reasoning does not hold for GitHub Pages.** "Deploy from branch, /docs"
+    publishes `docs/` as an ISOLATED site root - nothing outside it is ever served. `../` from
+    the published site walks off the site entirely, to `swuttipat.github.io/data/...`, a page
+    that was never part of this deployment. Confirmed live: that URL 404s.
+    **Fix:** `app_data.js` is duplicated into `docs/data/processed/app_data.js`, and the one
+    line in `docs/index.html` that loads it is rewritten to a same-level path with no `../`.
+    **`docs/index.html` is therefore NOT a byte-identical copy of `dashboard/index.html`** -
+    one line differs, deliberately. The sync step in `daily-collect.yml` does the copy, the
+    `sed` rewrite and the data duplication together, every run, so this cannot drift back
+    into the broken state by accident.
   - **Anyone with the link can read every SKU, brand, seller and price in the dataset.** There
     is no login. Treat the link as public from here on: do not put anything in `data/` that
     would matter if it were public, and do not assume the private-repo intent still applies to

@@ -1207,7 +1207,7 @@ function boot() {
 // The timestamp defeats the browser cache. Without it a re-run leaves the page showing
 // the previous collection, which is the worst kind of wrong: it looks fine.
 const dataScript = document.createElement("script");
-dataScript.src = "../data/processed/app_data.js?t=" + Date.now();
+dataScript.src = "data/processed/app_data.js?t=" + Date.now();
 dataScript.onload = boot;
 dataScript.onerror = () => {
   document.querySelector(".wrap").innerHTML =
