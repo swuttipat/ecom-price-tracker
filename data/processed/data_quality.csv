@@ -1,12 +1,12 @@
 ﻿metric,value,note
-raw_rows_read,31762,before de-duplication
+raw_rows_read,33024,before de-duplication
 duplicate_rows_dropped,0,same SKU twice on the same date
-rows_in_master,31762,
-unique_skus,2929,across all dates
-collection_dates,26,"2026-09-05, 2026-09-09, 2026-09-10, 2026-09-12, 2026-09-15"
-latest_date,2026-09-15,
+rows_in_master,33024,
+unique_skus,2988,across all dates
+collection_dates,27,"2026-09-09, 2026-09-10, 2026-09-12, 2026-09-15, 2026-09-17"
+latest_date,2026-09-17,
 days_since_collection,0,0 means collected today
-skus_in_latest,1236,
+skus_in_latest,1262,
 sponsored_in_latest,0,"ad placements, excluded from share-of-shelf"
 platforms_in_latest,lazada,
 missing_product_name,0,0.0% of the latest snapshot
@@ -18,6 +18,6 @@ missing_brand_name,0,0.0% of the latest snapshot
 missing_category,0,0.0% of the latest snapshot
 missing_subcategory,0,0.0% of the latest snapshot
 missing_review_count,0,0.0% of the latest snapshot
-no_units_sold_shown,519,42.0% of listings - no sold badge on the listing - Lazada hides it below a threshold
-no_rating_shown,469,37.9% of listings - no rating yet - listing has no reviews
+no_units_sold_shown,490,38.8% of listings - no sold badge on the listing - Lazada hides it below a threshold
+no_rating_shown,453,35.9% of listings - no rating yet - listing has no reviews
 unparsed_sold_strings,0,platform showed a sold count the parser could not read
